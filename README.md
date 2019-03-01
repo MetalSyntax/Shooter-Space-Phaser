@@ -7,7 +7,7 @@ Esta aplicacion es un software de codigo libre de un juego de naves espaciales e
 
 ## Codigo Fuente
 
-Shooter Space Phaser: https://github.com/MetalSyntax/Image-Credits-Nofollow-Plugin/
+Shooter Space Phaser: https://github.com/MetalSyntax/Shooter-Space-Phaser
 
 ## Donaciones
 
