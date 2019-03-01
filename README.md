@@ -3,7 +3,7 @@
 Esta aplicacion es un software de codigo libre de un juego de naves espaciales ejecutado en el navegador
 
 > Control de Cambios
-Proyecto inicial funcional a la espera de mejoras
+- Proyecto inicial funcional a la espera de mejoras
 
 ## Codigo Fuente
 
