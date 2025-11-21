@@ -41,9 +41,12 @@ export default class MainGame extends Phaser.Scene {
   private joystickThumb!: Phaser.GameObjects.Arc;
   private joystickPointer: Phaser.Input.Pointer | null = null;
   private joystickForce: { x: number; y: number } = { x: 0, y: 0 };
+  
+  // Buttons
   private rotateLeftBtn!: Phaser.GameObjects.Container;
   private rotateRightBtn!: Phaser.GameObjects.Container;
   private fireBtn!: Phaser.GameObjects.Container;
+  
   private touchControlsVisible: boolean = false;
   private playerRotation: number = -90; // Current rotation angle
 
@@ -64,26 +67,26 @@ export default class MainGame extends Phaser.Scene {
   create() {
     const { width, height } = this.cameras.main;
 
+    // CRITICAL FIX: Enable multi-touch (Mouse + 2 touches)
+    this.input.addPointer(3);
+
     // 1. Backgrounds
-    // Creating a parallax effect with two layers
     this.starfield = this.add
       .tileSprite(0, 0, width, height, "star")
       .setOrigin(0, 0)
       .setAlpha(0.3);
-    // Main background texture - set alpha to blend with background color
     this.background = this.add
       .tileSprite(0, 0, width, height, "background")
       .setOrigin(0, 0)
       .setAlpha(0.1);
 
     // 2. Player
-    // Rotate -90 degrees because the asset usually faces right, but we fly up
     this.player = this.physics.add.sprite(width / 2, height - 100, "ship");
     this.player.setAngle(-90);
     this.player.setDamping(true);
     this.player.setDrag(0.95);
     this.player.setMaxVelocity(400);
-    this.player.setCollideWorldBounds(false); // Allow wrapping
+    this.player.setCollideWorldBounds(false);
 
     // Shield Visual
     this.shieldVisual = this.add.circle(0, 0, 30, 0x0000ff, 0.3);
@@ -113,34 +116,10 @@ export default class MainGame extends Phaser.Scene {
     }
 
     // 5. Collisions
-    this.physics.add.overlap(
-      this.bullets,
-      this.enemies,
-      this.hitEnemy,
-      undefined,
-      this
-    );
-    this.physics.add.overlap(
-      this.player,
-      this.enemies,
-      this.hitPlayer,
-      undefined,
-      this
-    );
-    this.physics.add.overlap(
-      this.player,
-      this.enemyBullets,
-      this.hitPlayer,
-      undefined,
-      this
-    );
-    this.physics.add.overlap(
-      this.player,
-      this.powerups,
-      this.collectPowerup,
-      undefined,
-      this
-    );
+    this.physics.add.overlap(this.bullets, this.enemies, this.hitEnemy, undefined, this);
+    this.physics.add.overlap(this.player, this.enemies, this.hitPlayer, undefined, this);
+    this.physics.add.overlap(this.player, this.enemyBullets, this.hitPlayer, undefined, this);
+    this.physics.add.overlap(this.player, this.powerups, this.collectPowerup, undefined, this);
 
     // 6. UI
     this.scoreText = this.add.text(20, 20, "Score: 0", {
@@ -153,7 +132,7 @@ export default class MainGame extends Phaser.Scene {
       color: "#fff",
       fontFamily: "Arial",
     });
-    // Difficulty Indicator
+    
     const diffName = Object.keys(DifficultySettings).find(
       (key) => DifficultySettings[key as DifficultyLevel] === this.settings
     );
@@ -181,7 +160,7 @@ export default class MainGame extends Phaser.Scene {
   update(time: number, delta: number) {
     // Parallax
     this.background.tilePositionY -= 2;
-    this.starfield.tilePositionY -= 0.5; // Slower for depth
+    this.starfield.tilePositionY -= 0.5;
 
     if (!this.player.active) return;
 
@@ -193,25 +172,17 @@ export default class MainGame extends Phaser.Scene {
     // Update joystick
     this.updateJoystick();
 
-    // Movement - combine keyboard and joystick input
+    // Movement logic
     const accel = 600;
     let accelX = 0;
     let accelY = 0;
 
-    // Keyboard input
-    if (this.cursors.left.isDown || this.wasd.A.isDown) {
-      accelX = -accel;
-    } else if (this.cursors.right.isDown || this.wasd.D.isDown) {
-      accelX = accel;
-    }
+    if (this.cursors.left.isDown || this.wasd.A.isDown) accelX = -accel;
+    else if (this.cursors.right.isDown || this.wasd.D.isDown) accelX = accel;
 
-    if (this.cursors.up.isDown || this.wasd.W.isDown) {
-      accelY = -accel;
-    } else if (this.cursors.down.isDown || this.wasd.S.isDown) {
-      accelY = accel;
-    }
+    if (this.cursors.up.isDown || this.wasd.W.isDown) accelY = -accel;
+    else if (this.cursors.down.isDown || this.wasd.S.isDown) accelY = accel;
 
-    // Joystick input (override keyboard if active)
     if (this.joystickForce.x !== 0 || this.joystickForce.y !== 0) {
       accelX = this.joystickForce.x * accel;
       accelY = this.joystickForce.y * accel;
@@ -221,41 +192,29 @@ export default class MainGame extends Phaser.Scene {
     this.player.setAccelerationY(accelY);
 
     // Keyboard rotation
-    if (this.wasd.Q.isDown) {
-      this.playerRotation -= 3;
-    } else if (this.wasd.E.isDown) {
-      this.playerRotation += 3;
-    }
+    if (this.wasd.Q.isDown) this.playerRotation -= 3;
+    else if (this.wasd.E.isDown) this.playerRotation += 3;
 
-    // Update player rotation
     this.player.setAngle(this.playerRotation);
-
-    // Screen Wrap (appear on opposite side)
     this.physics.world.wrap(this.player, 20);
 
-    // Shoot
-    if (
-      this.cursors.space.isDown &&
-      time > this.lastFired
-    ) {
+    // Shoot (Keyboard)
+    if (this.cursors.space.isDown && time > this.lastFired) {
       this.fireBullet(time);
     }
 
-    // Enemy Logic (Custom update loop for complex patterns)
+    // Enemy Logic
     this.enemies.children.iterate((enemy: any) => {
       if (enemy && enemy.active) {
         if (enemy.getData("type") === "weaver") {
           enemy.x += Math.sin(time / 200) * 3;
         }
-
-        // Shooter logic
         if (enemy.getData("type") === "shooter") {
           if (time > enemy.getData("nextShot")) {
             this.fireEnemyBullet(enemy);
             enemy.setData("nextShot", time + 2000);
           }
         }
-
         if (enemy.y > this.cameras.main.height + 50) {
           enemy.destroy();
         }
@@ -267,7 +226,6 @@ export default class MainGame extends Phaser.Scene {
   }
 
   private fireBullet(time: number) {
-    // Calculate bullet spawn position based on ship rotation
     const angleRad = Phaser.Math.DegToRad(this.playerRotation);
     const offsetDistance = 20;
     const bulletX = this.player.x + Math.cos(angleRad) * offsetDistance;
@@ -277,49 +235,44 @@ export default class MainGame extends Phaser.Scene {
     if (bullet) {
       bullet.setActive(true);
       bullet.setVisible(true);
-      bullet.setAngle(this.playerRotation); // Match ship rotation
+      bullet.setAngle(this.playerRotation);
       
-      // Set velocity in the direction the ship is facing
       const speed = 600;
-      const velocityX = Math.cos(angleRad) * speed;
-      const velocityY = Math.sin(angleRad) * speed;
-      bullet.setVelocity(velocityX, velocityY);
+      bullet.setVelocity(Math.cos(angleRad) * speed, Math.sin(angleRad) * speed);
       
-      this.lastFired =
-        time +
-        (this.rapidFireActive ? this.baseFireDelay / 2 : this.baseFireDelay);
+      this.lastFired = time + (this.rapidFireActive ? this.baseFireDelay / 2 : this.baseFireDelay);
       synth.playLaser();
     }
   }
 
+  // --- TOUCH CONTROLS REFACTORED ---
+
   private createTouchControls() {
     const { width, height } = this.cameras.main;
+    const btnY = height - 80;
+    const joystickY = height - 80;
 
-    // Create Joystick (bottom left)
-    const joystickX = 100;
-    const joystickY = height - 100;
+    // 1. JOYSTICK
+    this.joystickBase = this.add.circle(100, joystickY, 50, 0x333333, 0.5)
+      .setStrokeStyle(2, 0x666666)
+      .setScrollFactor(0)
+      .setDepth(1000)
+      .setInteractive(); // Joystick base catches input directly now
     
-    this.joystickBase = this.add.circle(joystickX, joystickY, 50, 0x333333, 0.5);
-    this.joystickBase.setStrokeStyle(2, 0x666666);
-    this.joystickBase.setScrollFactor(0);
-    this.joystickBase.setDepth(1000);
-    
-    this.joystickThumb = this.add.circle(joystickX, joystickY, 25, 0x00ff00, 0.7);
-    this.joystickThumb.setStrokeStyle(2, 0x00ffff);
-    this.joystickThumb.setScrollFactor(0);
-    this.joystickThumb.setDepth(1001);
+    this.joystickThumb = this.add.circle(100, joystickY, 25, 0x00ff00, 0.7)
+      .setStrokeStyle(2, 0x00ffff)
+      .setScrollFactor(0)
+      .setDepth(1001);
 
-    // Make joystick interactive
-    this.joystickBase.setInteractive();
-    
-    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      const distance = Phaser.Math.Distance.Between(
-        pointer.x, pointer.y,
-        this.joystickBase.x, this.joystickBase.y
-      );
-      
-      if (distance < 50) {
-        this.joystickPointer = pointer;
+    // Joystick Event Listeners
+    this.joystickBase.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      this.joystickPointer = pointer;
+    });
+
+    // Global input for releasing/moving joystick ensures smooth dragging outside base
+    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      if (this.joystickPointer === pointer) {
+        this.updateJoystickPos(pointer);
       }
     });
 
@@ -331,26 +284,11 @@ export default class MainGame extends Phaser.Scene {
       }
     });
 
-    // Create Rotation Buttons (bottom right)
-    const btnSize = 50;
-    const btnY = height - 100;
-    
-    // Rotate Left Button
-    this.rotateLeftBtn = this.add.container(width - 160, btnY);
-    const leftBg = this.add.circle(0, 0, btnSize / 2, 0x333333, 0.5);
-    leftBg.setStrokeStyle(2, 0x666666);
-    const leftArrow = this.add.text(0, 0, '↶', { 
-      fontSize: '32px', 
-      color: '#00ffff' 
-    }).setOrigin(0.5);
-    this.rotateLeftBtn.add([leftBg, leftArrow]);
-    this.rotateLeftBtn.setSize(btnSize, btnSize);
-    this.rotateLeftBtn.setScrollFactor(0);
-    this.rotateLeftBtn.setDepth(1000);
-    this.rotateLeftBtn.setInteractive(new Phaser.Geom.Circle(0, 0, btnSize / 2), Phaser.Geom.Circle.Contains);
-    
-    this.rotateLeftBtn.on('pointerdown', () => {
-      this.tweens.add({
+    // 2. ROTATION BUTTONS (Helper function used)
+    this.rotateLeftBtn = this.createButton(width - 180, btnY, '↶', 0x00ffff, () => {
+       // Continuous rotation handled in update or via tween? 
+       // For better feel, let's use a simple interval or repeated tween
+       this.tweens.add({
         targets: this,
         playerRotation: this.playerRotation - 15,
         duration: 100,
@@ -358,21 +296,7 @@ export default class MainGame extends Phaser.Scene {
       });
     });
 
-    // Rotate Right Button
-    this.rotateRightBtn = this.add.container(width - 90, btnY);
-    const rightBg = this.add.circle(0, 0, btnSize / 2, 0x333333, 0.5);
-    rightBg.setStrokeStyle(2, 0x666666);
-    const rightArrow = this.add.text(0, 0, '↷', { 
-      fontSize: '32px', 
-      color: '#00ffff' 
-    }).setOrigin(0.5);
-    this.rotateRightBtn.add([rightBg, rightArrow]);
-    this.rotateRightBtn.setSize(btnSize, btnSize);
-    this.rotateRightBtn.setScrollFactor(0);
-    this.rotateRightBtn.setDepth(1000);
-    this.rotateRightBtn.setInteractive(new Phaser.Geom.Circle(0, 0, btnSize / 2), Phaser.Geom.Circle.Contains);
-    
-    this.rotateRightBtn.on('pointerdown', () => {
+    this.rotateRightBtn = this.createButton(width - 100, btnY, '↷', 0x00ffff, () => {
       this.tweens.add({
         targets: this,
         playerRotation: this.playerRotation + 15,
@@ -381,57 +305,74 @@ export default class MainGame extends Phaser.Scene {
       });
     });
 
-    // Fire Button (center right)
-    this.fireBtn = this.add.container(width - 100, height / 2);
-    const fireBg = this.add.circle(0, 0, 40, 0xff0000, 0.5);
-    fireBg.setStrokeStyle(3, 0xff6600);
-    const fireText = this.add.text(0, 0, '🔥', { 
-      fontSize: '32px' 
-    }).setOrigin(0.5);
-    this.fireBtn.add([fireBg, fireText]);
-    this.fireBtn.setSize(80, 80);
-    this.fireBtn.setScrollFactor(0);
-    this.fireBtn.setDepth(1000);
-    this.fireBtn.setInteractive(new Phaser.Geom.Circle(0, 0, 40), Phaser.Geom.Circle.Contains);
-    
-    let fireInterval: Phaser.Time.TimerEvent | null = null;
-    
-    this.fireBtn.on('pointerdown', () => {
+    // 3. FIRE BUTTON
+    // Special handling for fire to support holding down
+    this.fireBtn = this.createButton(width - 80, height - 200, '🔥', 0xff0000, () => {
       this.fireBullet(this.time.now);
-      
-      // Continuous fire while holding
+    });
+    
+    // Add rapid fire logic to the generated fire button
+    let fireInterval: Phaser.Time.TimerEvent | null = null;
+    this.fireBtn.on('pointerdown', () => {
+      // Start rapid fire
       fireInterval = this.time.addEvent({
         delay: this.rapidFireActive ? this.baseFireDelay / 2 : this.baseFireDelay,
-        callback: () => {
-          this.fireBullet(this.time.now);
-        },
+        callback: () => this.fireBullet(this.time.now),
         loop: true
       });
     });
-
-    this.fireBtn.on('pointerup', () => {
+    
+    const stopFire = () => {
       if (fireInterval) {
         fireInterval.remove();
         fireInterval = null;
       }
-    });
-
-    this.fireBtn.on('pointerout', () => {
-      if (fireInterval) {
-        fireInterval.remove();
-        fireInterval = null;
-      }
-    });
-
-    // Show controls on mobile or when touch is detected
-    this.touchControlsVisible = true;
-    this.showTouchControls(true);
+    };
+    
+    this.fireBtn.on('pointerup', stopFire);
+    this.fireBtn.on('pointerout', stopFire);
   }
 
-  private updateJoystick() {
-    if (!this.joystickPointer) return;
+  // Helper to create standardized, robust buttons
+  private createButton(x: number, y: number, label: string, color: number, onClick: () => void): Phaser.GameObjects.Container {
+    const container = this.add.container(x, y);
+    container.setScrollFactor(0);
+    container.setDepth(1000);
 
-    const pointer = this.joystickPointer;
+    // Larger hit area (invisible) for easier touching
+    const hitArea = new Phaser.Geom.Circle(0, 0, 50);
+    
+    // Visual Background
+    const bg = this.add.circle(0, 0, 35, 0x333333, 0.8);
+    bg.setStrokeStyle(2, color);
+    
+    // Text/Icon
+    const text = this.add.text(0, 0, label, { fontSize: '32px', color: '#ffffff' }).setOrigin(0.5);
+
+    container.add([bg, text]);
+    container.setInteractive(hitArea, Phaser.Geom.Circle.Contains);
+
+    // Input Logic
+    container.on('pointerdown', () => {
+      bg.setFillStyle(color, 0.5); // Visual feedback
+      container.setScale(0.9);
+      onClick();
+    });
+
+    container.on('pointerup', () => {
+      bg.setFillStyle(0x333333, 0.8); // Reset visual
+      container.setScale(1.0);
+    });
+
+    container.on('pointerout', () => {
+      bg.setFillStyle(0x333333, 0.8); // Reset visual
+      container.setScale(1.0);
+    });
+
+    return container;
+  }
+
+  private updateJoystickPos(pointer: Phaser.Input.Pointer) {
     const baseX = this.joystickBase.x;
     const baseY = this.joystickBase.y;
     
@@ -445,36 +386,28 @@ export default class MainGame extends Phaser.Scene {
     
     this.joystickThumb.setPosition(thumbX, thumbY);
     
-    // Calculate force (-1 to 1)
     this.joystickForce.x = (thumbX - baseX) / maxDistance;
     this.joystickForce.y = (thumbY - baseY) / maxDistance;
   }
 
-  private showTouchControls(visible: boolean) {
-    this.joystickBase.setVisible(visible);
-    this.joystickThumb.setVisible(visible);
-    this.rotateLeftBtn.setVisible(visible);
-    this.rotateRightBtn.setVisible(visible);
-    this.fireBtn.setVisible(visible);
+  private updateJoystick() {
+    // Logic moved to event handlers, but we can keep cleanup here if needed
+    if (!this.joystickPointer) {
+      this.joystickForce = { x: 0, y: 0 };
+      this.joystickThumb.setPosition(this.joystickBase.x, this.joystickBase.y);
+    }
   }
+
+  // --- GAMEPLAY HELPERS ---
 
   private fireEnemyBullet(enemy: Phaser.GameObjects.Sprite) {
     const bullet = this.enemyBullets.get(enemy.x, enemy.y + 20, "enemyBullet");
     if (bullet) {
       bullet.setActive(true);
       bullet.setVisible(true);
-      // Aim at player
       this.physics.moveToObject(bullet, this.player, 250);
-
-      // Rotate bullet to point in the direction it's moving
-      const angle = Phaser.Math.Angle.Between(
-        enemy.x,
-        enemy.y,
-        this.player.x,
-        this.player.y
-      );
-      bullet.setRotation(angle + Math.PI / 2); // +90 degrees to align with sprite orientation
-
+      const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, this.player.x, this.player.y);
+      bullet.setRotation(angle + Math.PI / 2);
       synth.playEnemyShoot();
     }
   }
@@ -488,24 +421,22 @@ export default class MainGame extends Phaser.Scene {
     let texture = "enemy";
     let velocityY = 150 * speedMult;
 
-    // Determine Enemy Type
     if (rand > 0.8) {
       type = "shooter";
-      texture = "enemyShip"; // Use the new enemy ship sprite
-      velocityY = 80 * speedMult; // Slower
+      texture = "enemyShip";
+      velocityY = 80 * speedMult;
     } else if (rand > 0.6) {
       type = "weaver";
       texture = "enemyWeaver";
-      velocityY = 200 * speedMult; // Faster
+      velocityY = 200 * speedMult;
     }
 
     const x = Phaser.Math.Between(30, width - 30);
     const enemy = this.enemies.create(x, -50, texture);
     enemy.setVelocityY(velocityY);
     enemy.setData("type", type);
-    enemy.setData("nextShot", 0); // For shooters
+    enemy.setData("nextShot", 0);
 
-    // Powerup Spawn Chance (5%)
     if (Math.random() < 0.05) {
       this.spawnPowerup();
     }
@@ -515,12 +446,7 @@ export default class MainGame extends Phaser.Scene {
     const { width } = this.cameras.main;
     const types = ["powerup_shield", "powerup_rapid", "powerup_bomb"];
     const type = Phaser.Utils.Array.GetRandom(types);
-
-    const pu = this.powerups.create(
-      Phaser.Math.Between(30, width - 30),
-      -50,
-      type
-    );
+    const pu = this.powerups.create(Phaser.Math.Between(30, width - 30), -50, type);
     pu.setVelocityY(100);
     pu.setData("type", type);
   }
@@ -530,13 +456,9 @@ export default class MainGame extends Phaser.Scene {
     powerup.destroy();
     synth.playPowerUp();
 
-    if (type === "powerup_shield") {
-      this.activateShield();
-    } else if (type === "powerup_rapid") {
-      this.activateRapidFire();
-    } else if (type === "powerup_bomb") {
-      this.activateBomb();
-    }
+    if (type === "powerup_shield") this.activateShield();
+    else if (type === "powerup_rapid") this.activateRapidFire();
+    else if (type === "powerup_bomb") this.activateBomb();
   }
 
   private activateShield() {
@@ -558,20 +480,15 @@ export default class MainGame extends Phaser.Scene {
   private activateBomb() {
     synth.playBomb();
     this.cameras.main.flash(500, 255, 255, 255);
-    // Destroy all enemies
     this.enemies.clear(true, true);
     this.enemyBullets.clear(true, true);
   }
 
   private hitEnemy(bullet: any, enemy: any) {
     if (bullet.active && enemy.active) {
-      // Create visual explosion effect using particles or simple tween
       const explosion = this.add.circle(enemy.x, enemy.y, 5, 0xffaa00);
       this.tweens.add({
-        targets: explosion,
-        scale: 3,
-        alpha: 0,
-        duration: 200,
+        targets: explosion, scale: 3, alpha: 0, duration: 200,
         onComplete: () => explosion.destroy(),
       });
 
@@ -586,7 +503,6 @@ export default class MainGame extends Phaser.Scene {
 
   private hitPlayer(player: any, danger: any) {
     if (this.hasShield) {
-      // Shield absorbs damage
       danger.destroy();
       return;
     }
@@ -596,34 +512,26 @@ export default class MainGame extends Phaser.Scene {
       this.lives--;
       this.livesText.setText(`Lives: ${this.lives}`);
       synth.playExplosion();
-
-      // Visual Feedback: Red Flash & Shake
       this.cameras.main.shake(200, 0.01);
       this.player.setTint(0xff0000);
       this.time.delayedCall(200, () => this.player.clearTint());
 
-      if (this.lives <= 0) {
-        this.gameOver();
-      }
+      if (this.lives <= 0) this.gameOver();
     }
   }
 
   private cleanup() {
     const { height } = this.cameras.main;
     const killY = height + 100;
-
-    const cleanGroup = (group: Phaser.Physics.Arcade.Group) => {
-      group.children.iterate((child: any) => {
-        if (child && child.active && (child.y > killY || child.y < -100)) {
-          child.destroy();
-        }
+    const clean = (g: Phaser.Physics.Arcade.Group) => {
+      g.children.iterate((c: any) => {
+        if (c && c.active && (c.y > killY || c.y < -100)) c.destroy();
         return true;
       });
     };
-
-    cleanGroup(this.bullets);
-    cleanGroup(this.enemyBullets);
-    cleanGroup(this.powerups);
+    clean(this.bullets);
+    clean(this.enemyBullets);
+    clean(this.powerups);
   }
 
   private handleResize(gameSize: any) {
@@ -634,22 +542,14 @@ export default class MainGame extends Phaser.Scene {
     this.livesText.setPosition(width - 120, 20);
     this.difficultyText.setPosition(width / 2, 20);
     
-    // Reposition touch controls
+    // Use fixed positions relative to screen corners
     if (this.joystickBase) {
-      this.joystickBase.setPosition(100, height - 100);
-      this.joystickThumb.setPosition(100, height - 100);
+        this.joystickBase.setPosition(100, height - 80);
+        this.joystickThumb.setPosition(100, height - 80);
     }
-    if (this.rotateLeftBtn) {
-      this.rotateLeftBtn.setPosition(width - 160, height - 100);
-    }
-    if (this.rotateRightBtn) {
-      this.rotateRightBtn.setPosition(width - 90, height - 100);
-    }
-    if (this.fireBtn) {
-      this.fireBtn.setPosition(width - 100, height / 2);
-    }
-    
-    // We don't strict bind physics world to screen to allow wrapping off-screen
+    if (this.rotateLeftBtn) this.rotateLeftBtn.setPosition(width - 180, height - 80);
+    if (this.rotateRightBtn) this.rotateRightBtn.setPosition(width - 100, height - 80);
+    if (this.fireBtn) this.fireBtn.setPosition(width - 80, height - 200);
   }
 
   private gameOver() {
