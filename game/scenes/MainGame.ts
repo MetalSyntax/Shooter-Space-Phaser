@@ -109,7 +109,7 @@ export default class MainGame extends Phaser.Scene {
     // 4. Inputs
     if (this.input.keyboard) {
       this.cursors = this.input.keyboard.createCursorKeys();
-      this.wasd = this.input.keyboard.addKeys("W,S,A,D");
+      this.wasd = this.input.keyboard.addKeys("W,S,A,D,Q,E");
     }
 
     // 5. Collisions
@@ -220,6 +220,13 @@ export default class MainGame extends Phaser.Scene {
     this.player.setAccelerationX(accelX);
     this.player.setAccelerationY(accelY);
 
+    // Keyboard rotation
+    if (this.wasd.Q.isDown) {
+      this.playerRotation -= 3;
+    } else if (this.wasd.E.isDown) {
+      this.playerRotation += 3;
+    }
+
     // Update player rotation
     this.player.setAngle(this.playerRotation);
 
@@ -228,7 +235,7 @@ export default class MainGame extends Phaser.Scene {
 
     // Shoot
     if (
-      (this.cursors.space.isDown || this.input.activePointer.isDown) &&
+      this.cursors.space.isDown &&
       time > this.lastFired
     ) {
       this.fireBullet(time);
