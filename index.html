@@ -1,14 +1,28 @@
-<!doctype html>
-<html>
-<head>
-<meta charset="UTF-8" />
-<title>Shooter</title>
-<script src="Js/phaser.js"></script>
-<script src="Js/terminado.js"></script>
-<script src="Js/juego.js"></script>
-<script src="Js/principal.js"></script>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Space Shooter Remastered</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body { margin: 0; padding: 0; overflow: hidden; background-color: #0f172a; }
+      #root { width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "phaser": "https://aistudiocdn.com/phaser@^3.90.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
 </head>
-<body>
-<div id="bloque_juego"></div>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
 </body>
 </html>
