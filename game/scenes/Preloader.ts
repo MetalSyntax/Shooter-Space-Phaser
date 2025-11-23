@@ -10,7 +10,7 @@ export default class Preloader extends Phaser.Scene {
     // Create a simple loading bar
     const width = this.cameras.main.width;
     const height = this.cameras.main.height;
-    
+
     const progressBar = this.add.graphics();
     const progressBox = this.add.graphics();
     progressBox.fillStyle(0x222222, 0.8);
@@ -34,17 +34,26 @@ export default class Preloader extends Phaser.Scene {
     this.load.image('bullet', 'Img/bullet.png');
     this.load.image('enemy', 'Img/enemy.png');
     this.load.image('background', 'Img/background.png');
-    
+
     // Load new enemy assets
     this.load.image('enemyShip', 'Img/enemy-ship.png');
     this.load.image('enemyWeaver', 'Img/enemy-weaver.png');
     this.load.image('enemyBullet', 'Img/bullet-enemy.png');
-    
+
     // Load power-up assets
     this.load.image('powerup_shield', 'Img/power-up-blue.png');
     this.load.image('powerup_rapid', 'Img/power-up-yellow.png');
     this.load.image('powerup_bomb', 'Img/power-up-red.png');
-    
+
+    // UI Assets
+    this.load.image('easy_active', 'Img/Easy-active.png');
+    this.load.image('easy_disable', 'Img/Easy-disable.png');
+    this.load.image('medium_active', 'Img/Medium-active.png');
+    this.load.image('medium_disable', 'Img/Medium-disable.png');
+    this.load.image('hard_active', 'Img/Hard-active.png');
+    this.load.image('hard_disable', 'Img/Hard-disable.png');
+    this.load.image('start_game', 'Img/start game.png');
+
     // Fallbacks if local files are missing (using placeholders for robustness)
     this.load.on('loaderror', (file: { key: string }) => {
       console.warn(`Asset missing: ${file.key}. Generating placeholder.`);

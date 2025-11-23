@@ -40,14 +40,15 @@ export default class MainGame extends Phaser.Scene {
   private joystickThumb!: Phaser.GameObjects.Arc;
   private joystickPointer: Phaser.Input.Pointer | null = null;
   private joystickForce: { x: number; y: number } = { x: 0, y: 0 };
-  
+
   // Buttons
   private rotateLeftBtn!: Phaser.GameObjects.Container;
   private rotateRightBtn!: Phaser.GameObjects.Container;
   private fireBtn!: Phaser.GameObjects.Container;
-  
+  private menuBtn!: Phaser.GameObjects.Text;
+
   private touchControlsVisible: boolean = false;
-  private playerRotation: number = -90; 
+  private playerRotation: number = -90;
 
   constructor() {
     super("MainGame");
@@ -107,9 +108,25 @@ export default class MainGame extends Phaser.Scene {
     // 6. UI
     this.scoreText = this.add.text(20, 20, "Score: 0", { fontSize: "20px", color: "#fff", fontFamily: "Arial" });
     this.livesText = this.add.text(width - 120, 20, "Lives: 3", { fontSize: "20px", color: "#fff", fontFamily: "Arial" });
-    
+
     const diffName = Object.keys(DifficultySettings).find((key) => DifficultySettings[key as DifficultyLevel] === this.settings);
     this.difficultyText = this.add.text(width / 2, 20, `${diffName} MODE`, { fontSize: "16px", color: "#ffff00" }).setOrigin(0.5, 0);
+
+    this.menuBtn = this.add.text(20, 60, "MENU", {
+      fontSize: "20px",
+      color: "#ffffff",
+      backgroundColor: "#333333",
+      padding: { x: 10, y: 5 }
+    })
+      .setScrollFactor(0)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.scene.start('MainMenu'));
+
+    if (this.input.keyboard) {
+      this.input.keyboard.on('keydown-ESC', () => {
+        this.scene.start('MainMenu');
+      });
+    }
 
     // 7. Spawner
     this.spawnTimer = this.time.addEvent({ delay: this.settings.spawnDelay, callback: this.spawnSequence, callbackScope: this, loop: true });
@@ -189,7 +206,7 @@ export default class MainGame extends Phaser.Scene {
     const offsetDistance = 20;
     const bulletX = this.player.x + Math.cos(angleRad) * offsetDistance;
     const bulletY = this.player.y + Math.sin(angleRad) * offsetDistance;
-    
+
     const bullet = this.bullets.get(bulletX, bulletY, "bullet");
     if (bullet) {
       bullet.setActive(true);
@@ -208,7 +225,7 @@ export default class MainGame extends Phaser.Scene {
     // 1. JOYSTICK
     this.joystickBase = this.add.circle(0, 0, 50, 0x333333, 0.5)
       .setStrokeStyle(2, 0x666666).setScrollFactor(0).setDepth(1000).setInteractive();
-    
+
     this.joystickThumb = this.add.circle(0, 0, 25, 0x00ff00, 0.7)
       .setStrokeStyle(2, 0x00ffff).setScrollFactor(0).setDepth(1001);
 
@@ -226,7 +243,7 @@ export default class MainGame extends Phaser.Scene {
 
     // 2. ROTATION BUTTONS
     this.rotateLeftBtn = this.createButton('↶', 0x00ffff, () => {
-       this.tweens.add({ targets: this, playerRotation: this.playerRotation - 15, duration: 100, ease: 'Linear' });
+      this.tweens.add({ targets: this, playerRotation: this.playerRotation - 15, duration: 100, ease: 'Linear' });
     });
 
     this.rotateRightBtn = this.createButton('↷', 0x00ffff, () => {
@@ -237,7 +254,7 @@ export default class MainGame extends Phaser.Scene {
     this.fireBtn = this.createButton('🔥', 0xff0000, () => {
       this.fireBullet(this.time.now);
     });
-    
+
     let fireInterval: Phaser.Time.TimerEvent | null = null;
     this.fireBtn.on('pointerdown', () => {
       fireInterval = this.time.addEvent({
@@ -245,7 +262,7 @@ export default class MainGame extends Phaser.Scene {
         callback: () => this.fireBullet(this.time.now), loop: true
       });
     });
-    
+
     const stopFire = () => { if (fireInterval) { fireInterval.remove(); fireInterval = null; } };
     this.fireBtn.on('pointerup', stopFire);
     this.fireBtn.on('pointerout', stopFire);
@@ -302,7 +319,7 @@ export default class MainGame extends Phaser.Scene {
     const rand = Math.random();
     const speedMult = this.settings.speedMultiplier;
     let type = "basic", texture = "enemy", velocityY = 150 * speedMult;
-    
+
     if (rand > 0.8) { type = "shooter"; texture = "enemyShip"; velocityY = 80 * speedMult; }
     else if (rand > 0.6) { type = "weaver"; texture = "enemyWeaver"; velocityY = 200 * speedMult; }
 
@@ -398,28 +415,30 @@ export default class MainGame extends Phaser.Scene {
     this.starfield.setSize(width, height);
     this.livesText.setPosition(width - 120, 20);
     this.difficultyText.setPosition(width / 2, 20);
-    
+    if (this.menuBtn) this.menuBtn.setPosition(20, 60);
+
     // REFINED CONTROL POSITIONING
-    // Joystick: Bottom Left, closer to edge to save space
+    // Joystick: Bottom Left, moved up for mobile browser bar safety
+    const safeBottomMargin = 120;
     const joystickX = 80;
-    const joystickY = height - 80;
-    
+    const joystickY = height - safeBottomMargin;
+
     if (this.joystickBase) {
-        this.joystickBase.setPosition(joystickX, joystickY);
-        this.joystickThumb.setPosition(joystickX, joystickY);
+      this.joystickBase.setPosition(joystickX, joystickY);
+      this.joystickThumb.setPosition(joystickX, joystickY);
     }
 
     // Action Buttons: Bottom Right Cluster
     // Move them further right to open up the center for the ship
-    const buttonBottomY = height - 70;
-    const buttonTopY = height - 160;
-    
+    const buttonBottomY = height - (safeBottomMargin - 10); // ~110 from bottom
+    const buttonTopY = height - (safeBottomMargin + 80); // ~200 from bottom
+
     // Rotate Right: Far bottom right corner
     if (this.rotateRightBtn) this.rotateRightBtn.setPosition(width - 60, buttonBottomY);
-    
+
     // Rotate Left: To the left of Rotate Right
     if (this.rotateLeftBtn) this.rotateLeftBtn.setPosition(width - 150, buttonBottomY);
-    
+
     // Fire: Above the two rotation buttons, centered relative to them approx
     if (this.fireBtn) this.fireBtn.setPosition(width - 70, buttonTopY);
   }

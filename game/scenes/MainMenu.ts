@@ -13,8 +13,9 @@ export default class MainMenu extends Phaser.Scene {
   private selectedDifficulty: DifficultyLevel = 'MEDIUM';
   private titleText!: Phaser.GameObjects.Text;
   private diffLabel!: Phaser.GameObjects.Text;
-  private diffButtons: Phaser.GameObjects.Text[] = [];
-  private startBtn!: Phaser.GameObjects.Text;
+  private diffButtons: Phaser.GameObjects.Image[] = [];
+  private startBtn!: Phaser.GameObjects.Image;
+  private fullscreenBtn!: Phaser.GameObjects.Text;
   private starfield!: Phaser.GameObjects.Group;
 
   constructor() {
@@ -44,12 +45,12 @@ export default class MainMenu extends Phaser.Scene {
     // Difficulty Buttons
     const difficulties: DifficultyLevel[] = ['EASY', 'MEDIUM', 'HARD'];
     this.diffButtons = difficulties.map(diff => {
-      const btn = this.add.text(0, 0, diff, {
-        fontFamily: 'Arial',
-        fontSize: '32px',
-        color: this.selectedDifficulty === diff ? '#00ff00' : '#ffffff',
-        fontStyle: 'bold'
-      }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+      const texture = this.getTextureKey(diff, this.selectedDifficulty === diff);
+      const btn = this.add.image(0, 0, texture)
+        .setOrigin(0.5)
+        .setInteractive({ useHandCursor: true });
+
+      btn.setData('difficulty', diff);
 
       btn.on('pointerdown', () => {
         this.selectedDifficulty = diff;
@@ -60,13 +61,9 @@ export default class MainMenu extends Phaser.Scene {
     });
 
     // Start Button
-    this.startBtn = this.add.text(0, 0, 'START GAME', {
-      fontFamily: 'Arial Black',
-      fontSize: '36px',
-      color: '#ffff00',
-      backgroundColor: '#aa0000',
-      padding: { x: 20, y: 10 }
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    this.startBtn = this.add.image(0, 0, 'start_game')
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
 
     this.tweens.add({
       targets: this.startBtn,
@@ -78,9 +75,28 @@ export default class MainMenu extends Phaser.Scene {
     });
 
     this.startBtn.on('pointerdown', this.startGame, this);
-    
+
+    this.input.keyboard?.on('keydown-ENTER', this.startGame, this);
     this.input.keyboard?.on('keydown-ENTER', this.startGame, this);
     this.input.keyboard?.on('keydown-SPACE', this.startGame, this);
+
+    // Fullscreen Button
+    this.fullscreenBtn = this.add.text(width - 20, 20, 'FULLSCREEN', {
+      fontFamily: 'Arial',
+      fontSize: '20px',
+      color: '#ffffff',
+      backgroundColor: '#333333',
+      padding: { x: 10, y: 5 }
+    })
+      .setOrigin(1, 0)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        if (this.scale.isFullscreen) {
+          this.scale.stopFullscreen();
+        } else {
+          this.scale.startFullscreen();
+        }
+      });
 
     // Initial Layout
     this.resizeLayout(width, height);
@@ -97,7 +113,7 @@ export default class MainMenu extends Phaser.Scene {
     // 1. Title Layout
     // Scale title to fit width with some padding
     const titleBaseSize = isLandscape ? 64 : 48;
-    const titleScale = Math.min(width / 500, 1); 
+    const titleScale = Math.min(width / 500, 1);
     this.titleText.setFontSize(titleBaseSize * titleScale);
     this.titleText.setPosition(width / 2, height * (isLandscape ? 0.15 : 0.15));
 
@@ -115,7 +131,7 @@ export default class MainMenu extends Phaser.Scene {
 
       this.diffButtons.forEach((btn, index) => {
         btn.setPosition(startX + (spacing * index), btnY);
-        btn.setFontSize(28);
+        btn.setScale(0.6);
       });
     } else {
       // Vertical layout for buttons in portrait
@@ -124,33 +140,40 @@ export default class MainMenu extends Phaser.Scene {
 
       this.diffButtons.forEach((btn, index) => {
         btn.setPosition(width / 2, startY + (spacing * index));
-        btn.setFontSize(32);
+        btn.setScale(0.6);
       });
     }
 
     // 3. Start Button
     this.startBtn.setPosition(width / 2, height * (isLandscape ? 0.85 : 0.85));
-    this.startBtn.setFontSize(isLandscape ? 36 : 28);
-    
+    this.startBtn.setPosition(width / 2, height * (isLandscape ? 0.85 : 0.85));
+    this.startBtn.setScale(isLandscape ? 1 : 0.8);
+
+    // 4. Fullscreen Button
+    if (this.fullscreenBtn) {
+      this.fullscreenBtn.setPosition(width - 20, 20);
+    }
+
     // Re-create starfield to cover new area if needed
     // (Simple approach: just ensure we have enough stars scattered)
   }
 
   private updateButtons() {
     this.diffButtons.forEach(btn => {
-      if (btn.text === this.selectedDifficulty) {
-        btn.setColor('#00ff00');
-        btn.setScale(1.2);
-      } else {
-        btn.setColor('#ffffff');
-        btn.setScale(1);
-      }
+      const diff = btn.getData('difficulty') as DifficultyLevel;
+      const isActive = diff === this.selectedDifficulty;
+      btn.setTexture(this.getTextureKey(diff, isActive));
     });
+  }
+
+  private getTextureKey(diff: DifficultyLevel, isActive: boolean): string {
+    const state = isActive ? 'active' : 'disable';
+    return `${diff.toLowerCase()}_${state}`;
   }
 
   private createStarfield(width: number, height: number) {
     // Clear existing if any (though we usually just add more or reset scene)
-    if (this.starfield) this.starfield.clear(true, true);
+    // Create new starfield group
     this.starfield = this.add.group();
 
     for (let i = 0; i < 100; i++) {
