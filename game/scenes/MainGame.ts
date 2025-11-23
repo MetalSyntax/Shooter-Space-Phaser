@@ -21,7 +21,7 @@ export default class MainGame extends Phaser.Scene {
   // UI
   private score: number = 0;
   private scoreText!: Phaser.GameObjects.Text;
-  private lives: number = 3;
+  private lives: number = 5;
   private livesText!: Phaser.GameObjects.Text;
   private difficultyText!: Phaser.GameObjects.Text;
 
@@ -34,6 +34,13 @@ export default class MainGame extends Phaser.Scene {
   // Powerups State
   private hasShield: boolean = false;
   private rapidFireActive: boolean = false;
+
+  // Boss State
+  private bossSpawned: boolean = false;
+  private boss!: Phaser.Physics.Arcade.Sprite;
+  private bossHealth: number = 20;
+  private bossMaxHealth: number = 20;
+  private bossHealthBar!: Phaser.GameObjects.Graphics;
 
   // Touch Controls
   private joystickBase!: Phaser.GameObjects.Arc;
@@ -57,11 +64,13 @@ export default class MainGame extends Phaser.Scene {
   init(data: { difficulty: DifficultyLevel }) {
     const diff = data.difficulty || "MEDIUM";
     this.settings = DifficultySettings[diff];
-    this.lives = 3;
+    this.lives = 5;
     this.score = 0;
     this.hasShield = false;
     this.rapidFireActive = false;
     this.playerRotation = -90;
+    this.bossSpawned = false;
+    this.bossHealth = 20;
   }
 
   create() {
@@ -107,7 +116,7 @@ export default class MainGame extends Phaser.Scene {
 
     // 6. UI
     this.scoreText = this.add.text(20, 20, "Score: 0", { fontSize: "20px", color: "#fff", fontFamily: "Arial" });
-    this.livesText = this.add.text(width - 120, 20, "Lives: 3", { fontSize: "20px", color: "#fff", fontFamily: "Arial" });
+    this.livesText = this.add.text(width - 120, 20, "Lives: 5", { fontSize: "20px", color: "#fff", fontFamily: "Arial" });
 
     const diffName = Object.keys(DifficultySettings).find((key) => DifficultySettings[key as DifficultyLevel] === this.settings);
     this.difficultyText = this.add.text(width / 2, 20, `${diffName} MODE`, { fontSize: "16px", color: "#ffff00" }).setOrigin(0.5, 0);
@@ -197,6 +206,18 @@ export default class MainGame extends Phaser.Scene {
       }
       return true;
     });
+
+    // Boss Logic
+    if (this.bossSpawned && this.boss && this.boss.active) {
+      // Boss movement (simple side to side)
+      this.boss.x = this.cameras.main.width / 2 + Math.sin(time / 1000) * (this.cameras.main.width / 3);
+
+      // Boss shooting
+      if (time > this.boss.getData("nextShot")) {
+        this.fireEnemyBullet(this.boss);
+        this.boss.setData("nextShot", time + 1500); // Faster shooting than normal enemies
+      }
+    }
 
     this.cleanup();
   }
@@ -315,6 +336,13 @@ export default class MainGame extends Phaser.Scene {
   }
 
   private spawnSequence() {
+    if (this.bossSpawned) return; // Stop spawning normal enemies if boss is here
+
+    if (this.score >= 1000 && !this.bossSpawned) {
+      this.spawnBoss();
+      return;
+    }
+
     const { width } = this.cameras.main;
     const rand = Math.random();
     const speedMult = this.settings.speedMultiplier;
@@ -330,6 +358,130 @@ export default class MainGame extends Phaser.Scene {
     enemy.setData("nextShot", 0);
 
     if (Math.random() < 0.05) this.spawnPowerup();
+  }
+
+  private spawnBoss() {
+    this.bossSpawned = true;
+    const { width } = this.cameras.main;
+
+    // Clear existing enemies
+    this.enemies.clear(true, true);
+    this.enemyBullets.clear(true, true);
+
+    // Create Boss
+    this.boss = this.physics.add.sprite(width / 2, 100, 'boss');
+    this.boss.setScale(1.5);
+    this.boss.setCollideWorldBounds(true);
+    this.boss.setData("nextShot", 0);
+    this.bossMaxHealth = 20; // Ensure it withstands 20 bullets
+    this.bossHealth = this.bossMaxHealth;
+
+    // Create Health Bar
+    this.bossHealthBar = this.add.graphics();
+    this.updateBossHealthBar();
+
+    // Add collision with bullets - FIXED: Bind directly to ensure context
+    this.physics.add.overlap(this.bullets, this.boss, this.hitBoss, undefined, this);
+
+    // Add collision with player
+    this.physics.add.overlap(this.player, this.boss, this.hitPlayer, undefined, this);
+
+    // Boss entrance animation
+    this.tweens.add({
+      targets: this.boss,
+      y: 150,
+      duration: 2000,
+      ease: 'Power2'
+    });
+
+    // Warning flash
+    this.cameras.main.flash(1000, 255, 0, 0);
+  }
+
+  // FIXED: Renamed params to generic object to handle argument flipping
+  private hitBoss(obj1: any, obj2: any) {
+    let bullet = obj1;
+    let boss = obj2;
+
+    // CRITICAL FIX: Auto-detect which parameter is the boss
+    // Phaser sometimes flips arguments if one is a Group and other is a Sprite
+    if (obj1 === this.boss) {
+      boss = obj1;
+      bullet = obj2;
+    }
+
+    // Ensure both exist and are active before processing
+    if (bullet && boss && bullet.active && boss.active) {
+      bullet.setActive(false).setVisible(false);
+      bullet.destroy();
+
+      this.bossHealth--;
+      this.updateBossHealthBar();
+
+      // Flash boss red and Shake (Scale only to avoid conflict with update loop)
+      boss.setTint(0xff0000);
+      this.cameras.main.shake(100, 0.005);
+
+      // Use a safe tween that won't break physics
+      this.tweens.add({
+        targets: boss,
+        scaleX: 1.6, // Slight scale up
+        scaleY: 1.6,
+        duration: 50,
+        yoyo: true
+      });
+
+      this.time.delayedCall(100, () => {
+        if (boss && boss.active) boss.clearTint();
+      });
+
+      if (this.bossHealth <= 0) {
+        this.victory();
+      } else {
+        synth.playExplosion(); // Small explosion sound for hit
+      }
+    }
+  }
+
+  private updateBossHealthBar() {
+    if (!this.bossHealthBar) return;
+
+    const width = 200;
+    const height = 20;
+    const x = this.cameras.main.width / 2 - width / 2;
+    const y = 50; // Top of screen
+
+    this.bossHealthBar.clear();
+
+    // Background
+    this.bossHealthBar.fillStyle(0x000000, 0.5);
+    this.bossHealthBar.fillRect(x, y, width, height);
+
+    // Health
+    const percentage = Phaser.Math.Clamp(this.bossHealth / this.bossMaxHealth, 0, 1);
+    const color = percentage > 0.5 ? 0x00ff00 : percentage > 0.25 ? 0xffff00 : 0xff0000;
+
+    this.bossHealthBar.fillStyle(color, 1);
+    this.bossHealthBar.fillRect(x, y, width * percentage, height);
+
+    // Border
+    this.bossHealthBar.lineStyle(2, 0xffffff);
+    this.bossHealthBar.strokeRect(x, y, width, height);
+  }
+
+  private victory() {
+    if (this.bossHealthBar) this.bossHealthBar.destroy();
+
+    // Safely destroy boss
+    if (this.boss) {
+      this.boss.destroy();
+    }
+
+    this.enemies.clear(true, true);
+    this.enemyBullets.clear(true, true);
+    this.bullets.clear(true, true);
+    synth.playPowerUp(); // Victory sound?
+    this.scene.start("Victory", { score: this.score });
   }
 
   private spawnPowerup() {
@@ -370,6 +522,9 @@ export default class MainGame extends Phaser.Scene {
 
   private hitEnemy(bullet: any, enemy: any) {
     if (bullet.active && enemy.active) {
+      // Safety check: Ensure we are not destroying the boss
+      if (enemy === this.boss) return;
+
       const explosion = this.add.circle(enemy.x, enemy.y, 5, 0xffaa00);
       this.tweens.add({ targets: explosion, scale: 3, alpha: 0, duration: 200, onComplete: () => explosion.destroy() });
       bullet.destroy();
@@ -381,9 +536,25 @@ export default class MainGame extends Phaser.Scene {
   }
 
   private hitPlayer(player: any, danger: any) {
-    if (this.hasShield) { danger.destroy(); return; }
+    if (this.hasShield) {
+      if (danger === this.boss) {
+        // Bounce boss back slightly if shield hits it
+        this.tweens.add({ targets: this.boss, y: this.boss.y - 50, duration: 200 });
+      } else {
+        danger.destroy();
+      }
+      return;
+    }
+
     if (player.active && danger.active) {
-      danger.destroy();
+      if (danger === this.boss) {
+        // If player hits boss, don't destroy boss!
+        // Just damage player and maybe push player/boss apart
+        this.tweens.add({ targets: this.boss, y: this.boss.y - 30, duration: 200 });
+      } else {
+        danger.destroy();
+      }
+
       this.lives--;
       this.livesText.setText(`Lives: ${this.lives}`);
       synth.playExplosion();

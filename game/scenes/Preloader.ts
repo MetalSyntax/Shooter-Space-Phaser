@@ -39,6 +39,7 @@ export default class Preloader extends Phaser.Scene {
     this.load.image('enemyShip', 'Img/enemy-ship.png');
     this.load.image('enemyWeaver', 'Img/enemy-weaver.png');
     this.load.image('enemyBullet', 'Img/bullet-enemy.png');
+    this.load.image('boss', 'Img/boss.png');
 
     // Load power-up assets
     this.load.image('powerup_shield', 'Img/power-up-blue.png');
@@ -52,7 +53,9 @@ export default class Preloader extends Phaser.Scene {
     this.load.image('medium_disable', 'Img/Medium-disable.png');
     this.load.image('hard_active', 'Img/Hard-active.png');
     this.load.image('hard_disable', 'Img/Hard-disable.png');
-    this.load.image('start_game', 'Img/start game.png');
+    this.load.image('start_game', 'Img/start-game.png');
+    this.load.image('restart_btn', 'Img/Restart.png');
+    this.load.image('game_over_text', 'Img/game-over.png');
 
     // Fallbacks if local files are missing (using placeholders for robustness)
     this.load.on('loaderror', (file: { key: string }) => {

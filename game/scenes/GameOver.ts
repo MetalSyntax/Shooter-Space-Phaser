@@ -16,15 +16,10 @@ export default class GameOver extends Phaser.Scene {
 
     this.add.tileSprite(0, 0, width, height, 'background').setOrigin(0, 0).setAlpha(0.3);
 
-    this.add.text(width / 2, height / 3, 'GAME OVER', {
-      fontFamily: 'Arial',
-      fontSize: '64px',
-      color: '#ff0000',
-      stroke: '#000000',
-      strokeThickness: 6,
-      align: 'center'
-    }).setOrigin(0.5);
+    // Game Over Image
+    this.add.image(width / 2, height / 3, 'game_over_text').setOrigin(0.5);
 
+    // Score Text
     this.add.text(width / 2, height / 2, `Final Score: ${this.score}`, {
       fontFamily: 'Arial',
       fontSize: '32px',
@@ -32,15 +27,14 @@ export default class GameOver extends Phaser.Scene {
       align: 'center'
     }).setOrigin(0.5);
 
-    const restartText = this.add.text(width / 2, height * 0.7, 'Click to Restart', {
-      fontFamily: 'Arial',
-      fontSize: '24px',
-      color: '#00ff00',
-      align: 'center'
-    }).setOrigin(0.5);
+    // Restart Button Image
+    const restartBtn = this.add.image(width / 2, height * 0.7, 'restart_btn')
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
 
+    // Pulse animation for the button
     this.tweens.add({
-      targets: restartText,
+      targets: restartBtn,
       scaleX: 1.1,
       scaleY: 1.1,
       duration: 500,
@@ -52,7 +46,7 @@ export default class GameOver extends Phaser.Scene {
       this.scene.start('MainGame');
     };
 
-    this.input.on('pointerdown', restartGame);
+    restartBtn.on('pointerdown', restartGame);
     this.input.keyboard?.on('keydown-SPACE', restartGame);
     this.input.keyboard?.on('keydown-ENTER', restartGame);
   }

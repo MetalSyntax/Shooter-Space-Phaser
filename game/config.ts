@@ -3,6 +3,7 @@ import Preloader from './scenes/Preloader';
 import MainMenu from './scenes/MainMenu';
 import MainGame from './scenes/MainGame';
 import GameOver from './scenes/GameOver';
+import Victory from './scenes/Victory';
 
 const gameConfig: Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -20,7 +21,7 @@ const gameConfig: Types.Core.GameConfig = {
       debug: false,
     },
   },
-  scene: [Preloader, MainMenu, MainGame, GameOver],
+  scene: [Preloader, MainMenu, MainGame, GameOver, Victory],
 };
 
 export default gameConfig;
