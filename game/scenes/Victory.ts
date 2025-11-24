@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { synth } from '../utils/Synth';
 
 export default class Victory extends Phaser.Scene {
     private score: number = 0;
@@ -16,15 +17,8 @@ export default class Victory extends Phaser.Scene {
 
         this.add.tileSprite(0, 0, width, height, 'background').setOrigin(0, 0).setAlpha(0.3);
 
-        // Victory Text (You might want to replace this with an image later if requested)
-        this.add.text(width / 2, height / 3, 'VICTORY!', {
-            fontFamily: 'Arial Black',
-            fontSize: '64px',
-            color: '#ffff00',
-            stroke: '#ff0000',
-            strokeThickness: 8,
-            align: 'center'
-        }).setOrigin(0.5);
+        // Victory Image
+        this.add.image(width / 2, height / 3, 'victory_text').setOrigin(0.5);
 
         // Score Text
         this.add.text(width / 2, height / 2, `Final Score: ${this.score}`, {
@@ -50,11 +44,14 @@ export default class Victory extends Phaser.Scene {
         });
 
         const restartGame = () => {
+            synth.stopMusic();
             this.scene.start('MainGame');
         };
 
         restartBtn.on('pointerdown', restartGame);
         this.input.keyboard?.on('keydown-SPACE', restartGame);
         this.input.keyboard?.on('keydown-ENTER', restartGame);
+
+        synth.playVictoryMusic();
     }
 }

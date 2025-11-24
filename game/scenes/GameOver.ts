@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { synth } from '../utils/Synth';
 
 export default class GameOver extends Phaser.Scene {
   private score: number = 0;
@@ -43,11 +44,14 @@ export default class GameOver extends Phaser.Scene {
     });
 
     const restartGame = () => {
+      synth.stopMusic();
       this.scene.start('MainGame');
     };
 
     restartBtn.on('pointerdown', restartGame);
     this.input.keyboard?.on('keydown-SPACE', restartGame);
     this.input.keyboard?.on('keydown-ENTER', restartGame);
+
+    synth.playGameOverMusic();
   }
 }

@@ -47,15 +47,19 @@ export default class Preloader extends Phaser.Scene {
     this.load.image('powerup_bomb', 'Img/power-up-red.png');
 
     // UI Assets
-    this.load.image('easy_active', 'Img/Easy-active.png');
+    this.load.image('easy_active', 'Img/Easy-enable.png');
     this.load.image('easy_disable', 'Img/Easy-disable.png');
-    this.load.image('medium_active', 'Img/Medium-active.png');
+    this.load.image('medium_active', 'Img/Medium-enable.png');
     this.load.image('medium_disable', 'Img/Medium-disable.png');
-    this.load.image('hard_active', 'Img/Hard-active.png');
+    this.load.image('hard_active', 'Img/Hard-enable.png');
     this.load.image('hard_disable', 'Img/Hard-disable.png');
     this.load.image('start_game', 'Img/start-game.png');
     this.load.image('restart_btn', 'Img/Restart.png');
     this.load.image('game_over_text', 'Img/game-over.png');
+    this.load.image('victory_text', 'Img/victory.png');
+    this.load.image('game_title', 'Img/Space-shooter.png');
+    this.load.image('fullscreen_btn', 'Img/fullscreen.png');
+    this.load.image('menu_btn', 'Img/menu.png');
 
     // Fallbacks if local files are missing (using placeholders for robustness)
     this.load.on('loaderror', (file: { key: string }) => {

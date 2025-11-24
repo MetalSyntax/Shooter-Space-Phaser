@@ -1,5 +1,6 @@
 
 import Phaser from 'phaser';
+import { synth } from '../utils/Synth';
 
 export type DifficultyLevel = 'EASY' | 'MEDIUM' | 'HARD';
 
@@ -11,11 +12,11 @@ export const DifficultySettings = {
 
 export default class MainMenu extends Phaser.Scene {
   private selectedDifficulty: DifficultyLevel = 'MEDIUM';
-  private titleText!: Phaser.GameObjects.Text;
+  private titleImage!: Phaser.GameObjects.Image;
   private diffLabel!: Phaser.GameObjects.Text;
   private diffButtons: Phaser.GameObjects.Image[] = [];
   private startBtn!: Phaser.GameObjects.Image;
-  private fullscreenBtn!: Phaser.GameObjects.Text;
+  private fullscreenBtn!: Phaser.GameObjects.Image;
   private starfield!: Phaser.GameObjects.Group;
 
   constructor() {
@@ -29,13 +30,7 @@ export default class MainMenu extends Phaser.Scene {
     this.createStarfield(width, height);
 
     // Title
-    this.titleText = this.add.text(0, 0, 'SPACE SHOOTER', {
-      fontFamily: 'Arial Black',
-      color: '#ffffff',
-      stroke: '#0000aa',
-      strokeThickness: 8,
-      align: 'center'
-    }).setOrigin(0.5).setShadow(2, 2, '#333333', 2, true, true);
+    this.titleImage = this.add.image(0, 0, 'game_title').setOrigin(0.5);
 
     // Difficulty Selector Label
     this.diffLabel = this.add.text(0, 0, 'Select Difficulty:', {
@@ -81,15 +76,10 @@ export default class MainMenu extends Phaser.Scene {
     this.input.keyboard?.on('keydown-SPACE', this.startGame, this);
 
     // Fullscreen Button
-    this.fullscreenBtn = this.add.text(width - 20, 20, 'FULLSCREEN', {
-      fontFamily: 'Arial',
-      fontSize: '20px',
-      color: '#ffffff',
-      backgroundColor: '#333333',
-      padding: { x: 10, y: 5 }
-    })
+    this.fullscreenBtn = this.add.image(width - 20, 20, 'fullscreen_btn')
       .setOrigin(1, 0)
       .setInteractive({ useHandCursor: true })
+      .setScale(0.55)
       .on('pointerdown', () => {
         if (this.scale.isFullscreen) {
           this.scale.stopFullscreen();
@@ -105,6 +95,8 @@ export default class MainMenu extends Phaser.Scene {
     this.scale.on('resize', (gameSize: any) => {
       this.resizeLayout(gameSize.width, gameSize.height);
     }, this);
+
+    synth.playMenuMusic();
   }
 
   private resizeLayout(width: number, height: number) {
@@ -112,10 +104,9 @@ export default class MainMenu extends Phaser.Scene {
 
     // 1. Title Layout
     // Scale title to fit width with some padding
-    const titleBaseSize = isLandscape ? 64 : 48;
-    const titleScale = Math.min(width / 500, 1);
-    this.titleText.setFontSize(titleBaseSize * titleScale);
-    this.titleText.setPosition(width / 2, height * (isLandscape ? 0.15 : 0.15));
+    const titleScale = Math.min(width / 600, 1); // Adjusted scale for image
+    this.titleImage.setScale(titleScale);
+    this.titleImage.setPosition(width / 2, height * (isLandscape ? 0.2 : 0.15));
 
     // 2. Difficulty Section
     const diffLabelY = height * (isLandscape ? 0.35 : 0.35);
@@ -136,11 +127,11 @@ export default class MainMenu extends Phaser.Scene {
     } else {
       // Vertical layout for buttons in portrait
       const startY = height * 0.45;
-      const spacing = 50;
+      const spacing = 70;
 
       this.diffButtons.forEach((btn, index) => {
         btn.setPosition(width / 2, startY + (spacing * index));
-        btn.setScale(0.6);
+        btn.setScale(0.55);
       });
     }
 
@@ -185,6 +176,7 @@ export default class MainMenu extends Phaser.Scene {
   }
 
   private startGame() {
+    synth.stopMusic();
     this.scene.start('MainGame', { difficulty: this.selectedDifficulty });
   }
 }

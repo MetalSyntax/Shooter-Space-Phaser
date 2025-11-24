@@ -52,7 +52,7 @@ export default class MainGame extends Phaser.Scene {
   private rotateLeftBtn!: Phaser.GameObjects.Container;
   private rotateRightBtn!: Phaser.GameObjects.Container;
   private fireBtn!: Phaser.GameObjects.Container;
-  private menuBtn!: Phaser.GameObjects.Text;
+  private menuBtn!: Phaser.GameObjects.Image;
 
   private touchControlsVisible: boolean = false;
   private playerRotation: number = -90;
@@ -87,9 +87,9 @@ export default class MainGame extends Phaser.Scene {
     this.player = this.physics.add.sprite(width / 2, height - 100, "ship");
     this.player.setAngle(-90);
     this.player.setDamping(true);
-    this.player.setDrag(0.95);
-    this.player.setMaxVelocity(400);
-    this.player.setCollideWorldBounds(false);
+    this.player.setDrag(0.85);
+    this.player.setMaxVelocity(250);
+    this.player.setCollideWorldBounds(true);
 
     // Shield Visual
     this.shieldVisual = this.add.circle(0, 0, 30, 0x0000ff, 0.3);
@@ -121,14 +121,11 @@ export default class MainGame extends Phaser.Scene {
     const diffName = Object.keys(DifficultySettings).find((key) => DifficultySettings[key as DifficultyLevel] === this.settings);
     this.difficultyText = this.add.text(width / 2, 20, `${diffName} MODE`, { fontSize: "16px", color: "#ffff00" }).setOrigin(0.5, 0);
 
-    this.menuBtn = this.add.text(20, 60, "MENU", {
-      fontSize: "20px",
-      color: "#ffffff",
-      backgroundColor: "#333333",
-      padding: { x: 10, y: 5 }
-    })
+    this.menuBtn = this.add.image(20, 60, 'menu_btn')
+      .setOrigin(0, 0.1)
       .setScrollFactor(0)
       .setInteractive({ useHandCursor: true })
+      .setScale(0.55)
       .on('pointerdown', () => this.scene.start('MainMenu'));
 
     if (this.input.keyboard) {
@@ -162,7 +159,7 @@ export default class MainGame extends Phaser.Scene {
     this.updateJoystick();
 
     // Movement
-    const accel = 600;
+    const accel = 400;
     let accelX = 0;
     let accelY = 0;
 
@@ -185,7 +182,6 @@ export default class MainGame extends Phaser.Scene {
     else if (this.wasd.E.isDown) this.playerRotation += 3;
 
     this.player.setAngle(this.playerRotation);
-    this.physics.world.wrap(this.player, 20);
 
     // Shoot (Keyboard)
     if (this.cursors.space.isDown && time > this.lastFired) {
