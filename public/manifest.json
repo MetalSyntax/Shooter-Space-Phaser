@@ -1,0 +1,39 @@
+{
+  "name": "Space Shooter Remastered",
+  "short_name": "SpaceShooter",
+  "description": "Retro space arcade shooter game remastered with zero-asset pixel art and procedural synth audio.",
+  "start_url": "./",
+  "display": "fullscreen",
+  "orientation": "portrait-primary",
+  "theme_color": "#060a18",
+  "background_color": "#060a18",
+  "lang": "es",
+  "categories": ["games", "arcade"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": []
+}
