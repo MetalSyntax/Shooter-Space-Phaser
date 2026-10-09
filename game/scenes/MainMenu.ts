@@ -5,6 +5,7 @@ import PixelButton, { pixelText, pixelScale, pixelTitle, sizeTitle, openOverlay 
 import { SHIPS, loadShip } from '../entities/Ships';
 import { loadCampaign, clearCampaign, newCampaign, CampaignState } from '../managers/LevelManager';
 import { loadScheme, saveScheme, nextScheme, SCHEMES } from '../ui/TouchControls';
+import { t, getLanguage, setLanguage, Lang } from '../utils/i18n';
 
 export type DifficultyLevel = 'EASY' | 'MEDIUM' | 'HARD';
 
@@ -14,12 +15,16 @@ export const DifficultySettings = {
   HARD: { speedMultiplier: 2.0, spawnDelay: 400, scoreMulti: 3 }
 };
 
-export const DifficultyLabels: Record<DifficultyLevel, string> = { EASY: 'FACIL', MEDIUM: 'NORMAL', HARD: 'DIFICIL' };
+export const DifficultyLabels = (): Record<DifficultyLevel, string> => ({
+  EASY: t('easy'),
+  MEDIUM: t('normal'),
+  HARD: t('hard'),
+});
 
-const DIFFS: { key: DifficultyLevel; color: number; desc: string }[] = [
-  { key: 'EASY', color: 0x33dd66, desc: 'PUNTOS x1 · RITMO TRANQUILO' },
-  { key: 'MEDIUM', color: 0xffcc33, desc: 'PUNTOS x2 · RITMO RAPIDO' },
-  { key: 'HARD', color: 0xff4455, desc: 'PUNTOS x3 · SOLO PARA ASES' },
+const DIFFS: { key: DifficultyLevel; color: number; descKey: 'easyDesc' | 'normalDesc' | 'hardDesc' }[] = [
+  { key: 'EASY', color: 0x33dd66, descKey: 'easyDesc' },
+  { key: 'MEDIUM', color: 0xffcc33, descKey: 'normalDesc' },
+  { key: 'HARD', color: 0xff4455, descKey: 'hardDesc' },
 ];
 
 export default class MainMenu extends Phaser.Scene {
@@ -43,6 +48,7 @@ export default class MainMenu extends Phaser.Scene {
   private hintText!: Phaser.GameObjects.Text;
   private musicBtn!: PixelButton;
   private sfxBtn!: PixelButton;
+  private langBtn!: PixelButton;
   private fullscreenBtn?: PixelButton;
 
   constructor() {
@@ -66,16 +72,16 @@ export default class MainMenu extends Phaser.Scene {
     this.ship = this.add.image(0, 0, `ship_${loadShip()}`).setAngle(-90).setInteractive({ useHandCursor: true })
       .on('pointerup', () => openOverlay(this, 'Hangar'));
 
-    this.diffLabel = this.add.text(0, 0, 'SELECCIONA DIFICULTAD', pixelText(12, '#8892b0')).setOrigin(0.5);
-    this.diffButtons = DIFFS.map(d => new PixelButton(this, DifficultyLabels[d.key], () => this.selectDifficulty(d.key), d.color));
+    this.diffLabel = this.add.text(0, 0, t('difficulty'), pixelText(12, '#8892b0')).setOrigin(0.5);
+    this.diffButtons = DIFFS.map(d => new PixelButton(this, DifficultyLabels()[d.key], () => this.selectDifficulty(d.key), d.color));
     this.diffDesc = this.add.text(0, 0, '', pixelText(8, '#c8d0e8')).setOrigin(0.5);
 
     // Campaign: continue from the auto-saved sector, or start a new run.
     this.saved = loadCampaign();
-    this.startBtn = new PixelButton(this, this.saved ? 'NUEVA PARTIDA' : '▶ JUGAR', () => this.startGame(), 0x4dd9ff);
+    this.startBtn = new PixelButton(this, this.saved ? t('newGame') : t('play'), () => this.startGame(), 0x4dd9ff);
     if (this.saved) {
       const s = this.saved;
-      this.continueBtn = new PixelButton(this, `▶ CONTINUAR S${s.level}`, () => this.continueGame(), 0xffdd33);
+      this.continueBtn = new PixelButton(this, `${t('continue')} S${s.level}`, () => this.continueGame(), 0xffdd33);
       this.continueBtn.selected = true;
       this.tweens.add({ targets: this.continueBtn, alpha: 0.75, duration: 600, yoyo: true, loop: -1 });
     } else {
@@ -85,32 +91,41 @@ export default class MainMenu extends Phaser.Scene {
 
     const best = ScoreManager.best();
     this.recordText = this.add.text(0, 0, best
-      ? `RECORD ${best.score} · ${DifficultyLabels[best.difficulty as DifficultyLevel] ?? best.difficulty}`
-      : 'RECORD --', pixelText(12, '#ffdd33')).setOrigin(0.5);
-    this.hintText = this.add.text(0, 0, isTouch ? '' : 'WASD MOVER · RATON APUNTAR · CLIC/ESPACIO DISPARAR · ESC PAUSA', pixelText(8, '#5a6488')).setOrigin(0.5);
+      ? `${t('record')} ${best.score} · ${DifficultyLabels()[best.difficulty as DifficultyLevel] ?? best.difficulty}`
+      : `${t('record')} --`, pixelText(12, '#ffdd33')).setOrigin(0.5);
+    this.hintText = this.add.text(0, 0, isTouch ? '' : t('controlsHintDesktop'), pixelText(8, '#5a6488')).setOrigin(0.5);
 
     // Hangar (ship select) and the in-game guide; refresh the ship when the hangar closes.
-    this.hangarBtn = new PixelButton(this, `NAVE: ${SHIPS[loadShip()].name}`, () => openOverlay(this, 'Hangar'), 0xffdd33);
-    this.guideBtn = new PixelButton(this, 'GUIA', () => openOverlay(this, 'Guide'), 0x4dd9ff);
+    this.hangarBtn = new PixelButton(this, `${t('shipPrefix')} ${SHIPS[loadShip()].name}`, () => openOverlay(this, 'Hangar'), 0xffdd33);
+    this.guideBtn = new PixelButton(this, t('guide'), () => openOverlay(this, 'Guide'), 0x4dd9ff);
     this.events.on('resume', () => {
       this.ship.setTexture(`ship_${loadShip()}`);
-      this.hangarBtn.setText(`NAVE: ${SHIPS[loadShip()].name}`);
+      this.hangarBtn.setText(`${t('shipPrefix')} ${SHIPS[loadShip()].name}`);
+      this.refreshTexts();
     });
 
     // Mobile: pick a control scheme
     if (isTouch) {
-      const label = () => `CONTROLES: ${SCHEMES[loadScheme()].label}`;
+      const label = () => `${t('controlsPrefix')} ${SCHEMES[loadScheme()].label}`;
       this.controlsBtn = new PixelButton(this, label(), () => {
         saveScheme(nextScheme(loadScheme()));
         this.controlsBtn!.setText(label());
       }, 0x66ccff);
     }
 
-    // Top bar: separate music / sfx toggles + fullscreen
+    // Top bar: separate music / sfx toggles + language toggle + fullscreen
     const musicLabel = () => `♪ ${synth.musicMuted ? 'OFF' : 'ON'}`;
     const sfxLabel = () => `SFX ${synth.sfxMuted ? 'OFF' : 'ON'}`;
+    const langLabel = () => getLanguage().toUpperCase();
+
     this.musicBtn = new PixelButton(this, musicLabel(), () => { synth.setMusicMuted(!synth.musicMuted); this.musicBtn.setText(musicLabel()); });
     this.sfxBtn = new PixelButton(this, sfxLabel(), () => { synth.setSfxMuted(!synth.sfxMuted); this.sfxBtn.setText(sfxLabel()); });
+    this.langBtn = new PixelButton(this, langLabel(), () => {
+      setLanguage(getLanguage() === 'es' ? 'en' : 'es');
+      this.langBtn.setText(langLabel());
+      this.refreshTexts();
+    }, 0x3dff6e);
+
     if (this.sys.game.device.fullscreen.available) {
       this.fullscreenBtn = new PixelButton(this, '⛶', () => {
         if (this.scale.isFullscreen) this.scale.stopFullscreen();
@@ -141,6 +156,28 @@ export default class MainMenu extends Phaser.Scene {
     synth.playMenuMusic();
   }
 
+  private refreshTexts() {
+    this.diffLabel.setText(t('difficulty'));
+    this.diffButtons.forEach((b, i) => b.setText(DifficultyLabels()[DIFFS[i].key]));
+    this.startBtn.setText(this.saved ? t('newGame') : t('play'));
+    if (this.continueBtn && this.saved) {
+      this.continueBtn.setText(`${t('continue')} S${this.saved.level}`);
+    }
+    const best = ScoreManager.best();
+    this.recordText.setText(best
+      ? `${t('record')} ${best.score} · ${DifficultyLabels()[best.difficulty as DifficultyLevel] ?? best.difficulty}`
+      : `${t('record')} --`);
+    if (!this.sys.game.device.input.touch) {
+      this.hintText.setText(t('controlsHintDesktop'));
+    }
+    this.hangarBtn.setText(`${t('shipPrefix')} ${SHIPS[loadShip()].name}`);
+    this.guideBtn.setText(t('guide'));
+    if (this.controlsBtn) {
+      this.controlsBtn.setText(`${t('controlsPrefix')} ${SCHEMES[loadScheme()].label}`);
+    }
+    this.selectDifficulty(this.selectedDifficulty);
+  }
+
   update() {
     this.background.tilePositionY -= 0.5;
   }
@@ -156,8 +193,9 @@ export default class MainMenu extends Phaser.Scene {
     // Top bar
     const barH = Phaser.Math.Clamp(Math.round(height * 0.06), 32, 40);
     const barFont = barH * 0.32;
-    this.musicBtn.layout(barH * 2.4, barH, barFont).setPosition(pad + barH * 1.2, pad + barH / 2);
-    this.sfxBtn.layout(barH * 2.6, barH, barFont).setPosition(pad + barH * 2.4 + 8 + barH * 1.3, pad + barH / 2);
+    this.musicBtn.layout(barH * 2.2, barH, barFont).setPosition(pad + barH * 1.1, pad + barH / 2);
+    this.sfxBtn.layout(barH * 2.4, barH, barFont).setPosition(pad + barH * 2.2 + 8 + barH * 1.2, pad + barH / 2);
+    this.langBtn.layout(barH * 1.6, barH, barFont).setPosition(pad + barH * 4.6 + 16 + barH * 0.8, pad + barH / 2);
     this.fullscreenBtn?.layout(barH, barH, barH * 0.5).setPosition(width - pad - barH / 2, pad + barH / 2);
 
     // Sizes
@@ -167,7 +205,6 @@ export default class MainMenu extends Phaser.Scene {
     this.hangarBtn.layout(navW * 1.25, barH, barFont);
     this.guideBtn.layout(navW * 0.75, barH, barFont);
     const short = height < 520; // landscape phones: drop the decorative ship, tighten everything
-    // 13 glyphs + outline: size the title to the width, capped by the available height.
     sizeTitle(this.title, Math.min((width - pad * 2) / 14.5, height * (short ? 0.08 : 0.09), 56));
     this.ship.setVisible(!short).setScale(pixelScale(this.ship.height, height * 0.09, 2));
 
@@ -227,7 +264,7 @@ export default class MainMenu extends Phaser.Scene {
       btn.redraw();
     });
     const d = DIFFS.find(x => x.key === diff)!;
-    this.diffDesc.setText(d.desc).setColor(Phaser.Display.Color.IntegerToColor(d.color).rgba);
+    this.diffDesc.setText(t(d.descKey)).setColor(Phaser.Display.Color.IntegerToColor(d.color).rgba);
   }
 
   private startGame() {
@@ -241,3 +278,4 @@ export default class MainMenu extends Phaser.Scene {
     this.scene.start('MainGame', { campaign: this.saved });
   }
 }
+

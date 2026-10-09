@@ -6,7 +6,7 @@ import {
 } from '../generators/PixelArtGenerator';
 import * as Original from '../generators/OriginalSprites';
 import type { EncodedSprite } from '../generators/OriginalSprites';
-import { generateTurret, generateShieldOrb, generateCore } from '../generators/BossGenerator';
+import { generateTurret, generateShieldOrb, generateCore, generateBossHull } from '../generators/BossGenerator';
 import { LEVELS, ABILITIES, AbilityColor } from '../managers/LevelManager';
 import { SHIPS } from '../entities/Ships';
 
@@ -18,6 +18,21 @@ const POWERUP_ART: Record<string, [EncodedSprite, number, number]> = {
   drone: [Original.powerupBlue, 0, 0.1], magnet: [Original.powerupBlue, 80, 1],
 };
 
+/** Helper to overlay grid B onto grid A at (ox, oy) */
+function blitGrid(dest: Grid, src: Grid, ox: number, oy: number): void {
+  src.forEach((row, y) => {
+    row.forEach((val, x) => {
+      if (val !== 0) {
+        const dy = oy + y;
+        const dx = ox + x;
+        if (dy >= 0 && dy < dest.length && dx >= 0 && dx < dest[0].length) {
+          dest[dy][dx] = val;
+        }
+      }
+    });
+  });
+}
+
 /** Renders an original sprite 1:1, optionally recolored. */
 function renderOriginal(scene: Phaser.Scene, key: string, art: EncodedSprite, hue = 0, sat = 1): void {
   const { grid, palette } = decodeSprite(art);
@@ -25,12 +40,17 @@ function renderOriginal(scene: Phaser.Scene, key: string, art: EncodedSprite, hu
 }
 
 /**
- * Enemy fleet derived from the three original designs. Hull = family, color = ability:
- *  - Drone: original weaver (white = no ability; tinted for blinker/kamikaze/splitter babies)
- *  - Pod: weaver body without legs (blue, shielded)
- *  - Gunship: original red ship (red aimed / orange fan / cyan laser)
- *  - Lancer: gunship fuselage without the big wings (yellow, dashes)
- *  - Spiderling: half-size boss (green, splits)
+ * Enemy fleet derived from the three original designs.
+ * Each variety now has a UNIQUE GEOMETRIC SILHOUETTE, not just a tint:
+ *  - Drone: original weaver hull (35x42)
+ *  - Blinker: compact telemetry diamond core with phase apertures
+ *  - Kamikaze: raked needle-nose dart with stub wings
+ *  - Pod: weaver body without legs + armored bulkhead
+ *  - Gunship: original heavy red ship (50x55)
+ *  - Spreader: extended wide multi-barrel wingspan platform
+ *  - LaserShip: spinal beam rail with forward emitter crest
+ *  - Lancer: sleek high-velocity fuselage without wide wings
+ *  - Spiderling: downsampled spider dreadnought
  *  - Asteroid: the original "enemy" rock (big + small fragments)
  */
 function renderFleet(scene: Phaser.Scene): void {
@@ -38,16 +58,51 @@ function renderFleet(scene: Phaser.Scene): void {
   const ship = decodeSprite(Original.enemyShip);
   const boss = decodeSprite(Original.boss);
   const rock = decodeSprite(Original.enemy);
-  // Grey hulls: recolor the red eyes to the ability hue, then wash the hull with the ability color.
+
   const tint = (p: Palette, c: AbilityColor, amount = 0.6) => tintPalette(shiftPalette(p, ABILITIES[c].hue), ABILITIES[c].color, amount);
   const hue = (p: Palette, c: AbilityColor) => shiftPalette(p, ABILITIES[c].hue, 1.1);
 
+  // 1. Drones & aerial specialists
   renderTexture(scene, 'en_drone', weaver.grid, weaver.palette, 1);
-  (['purple', 'yellow', 'green'] as const).forEach(c => renderTexture(scene, `en_drone_${c}`, weaver.grid, tint(weaver.palette, c), 1));
+  
+  // Blinker (Purple): Compact telemetry chassis
+  const blinkerGrid = crop(weaver.grid, 6, 0, 30, 30);
+  renderTexture(scene, 'en_drone_purple', blinkerGrid, tint(weaver.palette, 'purple', 0.65), 1);
+
+  // Kamikaze (Yellow): Sleek arrowhead ram-dart
+  const kamikazeGrid = crop(ship.grid, 18, 0, 19, 36);
+  renderTexture(scene, 'en_drone_yellow', kamikazeGrid, hue(ship.palette, 'yellow'), 1);
+
+  // Splitter baby (Green): miniature weaver drone
+  renderTexture(scene, 'en_drone_green', weaver.grid, tint(weaver.palette, 'green', 0.65), 1);
+
+  // Pod (Blue): Weaver body armored pod
   renderTexture(scene, 'en_pod_blue', crop(weaver.grid, 0, 0, 42, 25), tint(weaver.palette, 'blue', 0.6), 1);
-  (['red', 'orange', 'cyan'] as const).forEach(c => renderTexture(scene, `en_gunship_${c}`, ship.grid, hue(ship.palette, c), 1));
+
+  // 2. Heavy Gunships
+  renderTexture(scene, 'en_gunship_red', ship.grid, hue(ship.palette, 'red'), 1);
+
+  // Spreader (Orange): Wide broadside multi-gun variant
+  const spreaderBase = crop(ship.grid, 0, 10, 55, 40);
+  const spreaderGrid = makeGrid(65, 40);
+  blitGrid(spreaderGrid, spreaderBase, 5, 0);
+  renderTexture(scene, 'en_gunship_orange', spreaderGrid, hue(ship.palette, 'orange'), 1);
+
+  // LaserShip (Cyan): Heavy spinal lance with emitter hood
+  const laserSpine = crop(ship.grid, 16, 0, 23, 50);
+  const laserCrest = crop(weaver.grid, 11, 0, 20, 15);
+  const laserGrid = makeGrid(35, 55);
+  blitGrid(laserGrid, laserSpine, 6, 5);
+  blitGrid(laserGrid, laserCrest, 7, 0);
+  renderTexture(scene, 'en_gunship_cyan', laserGrid, hue(ship.palette, 'cyan'), 1);
+
+  // Lancer (Yellow): Sleek aerodynamic interceptor
   renderTexture(scene, 'en_lancer_yellow', crop(ship.grid, 14, 0, 27, 50), hue(ship.palette, 'yellow'), 1);
+
+  // Spiderling (Green): Broodmother spider
   renderTexture(scene, 'en_spider_green', downsample(boss.grid, 2), hue(boss.palette, 'green'), 1);
+
+  // Hazards
   renderTexture(scene, 'asteroid', rock.grid, rock.palette, 1);
   renderTexture(scene, 'asteroid_small', downsample(rock.grid, 2), rock.palette, 1);
   (Object.keys(ABILITIES) as AbilityColor[]).forEach(c => renderOriginal(scene, `eb_${c}`, Original.enemyBullet, ABILITIES[c].hue, 1.1));
@@ -94,13 +149,19 @@ export default class Preloader extends Phaser.Scene {
     renderFleet(this);
     Object.entries(POWERUP_ART).forEach(([kind, [art, hue, sat]]) => renderOriginal(this, `powerup_${kind}`, art, hue, sat));
 
-    // Per-sector faction sprites
+    // Per-sector faction sprites & UNIQUE boss hull structures
+    const bossOrig = decodeSprite(Original.boss);
     LEVELS.forEach(level => {
       const pal = PALETTES[level.palette];
       const l = level.id;
-      // The boss and its bullets carry the sector's colors.
+      // The boss bullet carries the sector's colors.
       renderOriginal(this, `eb_${l}`, Original.enemyBullet, level.hue, level.sat);
-      renderOriginal(this, `boss_${l}`, Original.boss, level.hue, level.sat);
+      
+      // Each boss has a unique geometric silhouette generated by generateBossHull
+      const bossHullGrid = generateBossHull(level.boss);
+      const bossPal = shiftPalette(bossOrig.palette, level.hue, level.sat);
+      renderTexture(this, `boss_${l}`, bossHullGrid, bossPal, 1);
+
       renderTexture(this, `en_mine_${l}`, this.mine(), pal, 3);
       renderTexture(this, `turret_${l}`, flipV(generateTurret(hashString(`turret:${l}`))), pal, 3);
       renderTexture(this, `shield_${l}`, generateShieldOrb(), pal, 3);

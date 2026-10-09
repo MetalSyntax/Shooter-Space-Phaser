@@ -1,13 +1,14 @@
 import Phaser from 'phaser';
 import PixelButton, { pixelText, pixelTitle, sizeTitle, pixelScale } from '../ui/PixelButton';
-import { SHIPS, SHIP_ORDER, loadShip, saveShip, type ShipId } from '../entities/Ships';
+import { SHIPS, SHIP_ORDER, loadShip, saveShip, shipInfo, type ShipId } from '../entities/Ships';
 import { loadCampaign } from '../managers/LevelManager';
+import { t, getLanguage } from '../utils/i18n';
 
-const STATS: [label: string, value: (id: ShipId) => number, max: number][] = [
-  ['VELOCIDAD', id => SHIPS[id].speed, 1.3],
-  ['CADENCIA', id => SHIPS[id].fireRate * (1 + SHIPS[id].extraShots), 2.3],
-  ['VIDAS', id => SHIPS[id].lives, 7],
-  ['BOMBAS', id => SHIPS[id].bombs, 3],
+const STATS: [key: 'speed' | 'fireRate' | 'lives' | 'bombs', value: (id: ShipId) => number, max: number][] = [
+  ['speed', id => SHIPS[id].speed, 1.3],
+  ['fireRate', id => SHIPS[id].fireRate * (1 + SHIPS[id].extraShots), 2.3],
+  ['lives', id => SHIPS[id].lives, 7],
+  ['bombs', id => SHIPS[id].bombs, 3],
 ];
 
 /** Ship select: browse with arrows / swipe-free buttons; the choice applies to new campaigns. */
@@ -28,7 +29,7 @@ export default class Hangar extends Phaser.Scene {
     const { width, height } = this.scale;
     const col = Math.min(width - 32, 520);
     this.add.rectangle(0, 0, width, height, 0x050814, 1).setOrigin(0).setInteractive();
-    const title = pixelTitle(this, 'HANGAR', '#fff27a', '#ff9d00', '#5a2a00');
+    const title = pixelTitle(this, t('hangar'), '#fff27a', '#ff9d00', '#5a2a00');
     sizeTitle(title, Math.min(32, width / 9));
     title.setPosition(width / 2, 24 + title.height / 2);
 
@@ -49,24 +50,26 @@ export default class Hangar extends Phaser.Scene {
     prev.setPosition(width / 2 - spread, shipY);
     next.setPosition(width / 2 + spread, shipY);
 
-    const note = this.add.text(width / 2, height - 84, loadCampaign() ? 'SE APLICA AL EMPEZAR UNA NUEVA PARTIDA' : '', pixelText(8, '#8892b0')).setOrigin(0.5);
-    new PixelButton(this, 'LISTO', () => this.close(), 0xffdd33).layout(Math.min(col, 260), 44, 12).setPosition(width / 2, height - 40);
+    const note = this.add.text(width / 2, height - 84, loadCampaign() ? t('hangarApplyNote') : '', pixelText(8, '#8892b0')).setOrigin(0.5);
+    new PixelButton(this, t('ready'), () => this.close(), 0xffdd33).layout(Math.min(col, 260), 44, 12).setPosition(width / 2, height - 40);
     note.setVisible(!!note.text);
 
     const render = () => {
       const s = SHIPS[this.current];
+      const isEn = getLanguage() === 'en';
+      const info = shipInfo(this.current, isEn);
       const css = Phaser.Display.Color.IntegerToColor(s.color).rgba;
       ship.setTexture(`ship_${this.current}`).setScale(pixelScale(ship.width, Math.min(col * 0.4, height * 0.18), 3));
       name.setText(s.name).setColor(css).setY(shipY + ship.displayWidth / 2 + 24);
-      ability.setText(s.ability).setColor(css).setY(name.y + 26);
-      desc.setText(s.desc).setY(ability.y + 18);
+      ability.setText(info.ability).setColor(css).setY(name.y + 26);
+      desc.setText(info.desc).setY(ability.y + 18);
       counter.setText(`${SHIP_ORDER.indexOf(this.current) + 1} / ${SHIP_ORDER.length}`).setY(shipY - ship.displayWidth / 2 - 14);
       bars.clear();
       const barW = Math.min(col - 120, 260);
       const x0 = width / 2 - (barW + 110) / 2 + 110;
-      STATS.forEach(([label, value, max], i) => {
+      STATS.forEach(([statKey, value, max], i) => {
         const y = desc.y + desc.height + 22 + i * 22;
-        labels[i].setText(label).setPosition(x0 - 110, y - 4);
+        labels[i].setText(t(statKey)).setPosition(x0 - 110, y - 4);
         bars.fillStyle(0x1e293b, 1).fillRect(x0, y - 4, barW, 10);
         bars.fillStyle(s.color, 1).fillRect(x0, y - 4, barW * Math.min(1, value(this.current) / max), 10);
       });

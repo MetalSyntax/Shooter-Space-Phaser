@@ -51,7 +51,18 @@ const tinted = tintPalette([0, 0x808080, 0xffffff], 0x3d7bff, 1);
 assert.ok((tinted[1] & 255) > (tinted[1] >> 16 & 255), 'grey becomes blue-ish');
 assert.equal(tintPalette([0, 0x123456], 0xff0000, 0)[1], 0x123456, 'amount 0 = identity');
 
+import { generateBossHull, type BossKind } from './BossGenerator.ts';
+
+const bossKinds: BossKind[] = ['goliath', 'viper', 'aegis', 'hydra', 'miner', 'phantom', 'carrier', 'behemoth', 'titan', 'leviathan'];
+bossKinds.forEach(kind => {
+  const hull = generateBossHull(kind);
+  assert.ok(hull.length > 50, `${kind} height`);
+  assert.ok(hull[0].length > 40, `${kind} width`);
+  assert.ok(hull.flat().some(v => v > 0), `${kind} has pixels`);
+});
+
 if (process.argv.includes('--show')) {
   [3, 11, 24].forEach(s => console.log(show(generateShip(s)) + '\n'));
 }
 console.log('generators ok');
+

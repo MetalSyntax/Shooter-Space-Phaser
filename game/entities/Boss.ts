@@ -3,6 +3,7 @@ import { synth } from '../utils/Synth';
 import { BossPart, Mine, Kamikaze } from './Enemy';
 import type { LevelDef } from '../managers/LevelManager';
 import type MainGame from '../scenes/MainGame';
+import { t } from '../utils/i18n';
 
 export type BossState = 'ENTERING' | 'IDLE' | 'ATTACK_SPREAD' | 'ATTACK_LASER' | 'DASH' | 'SPECIAL' | 'DYING';
 
@@ -202,7 +203,8 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
       this.phase = phase;
       this.setTint(phase === 3 ? 0xff4444 : 0xff9999);
       this.scene.fx.shake(0.5);
-      this.scene.fx.floatingText(this.x, this.y + 60, phase === 3 ? 'SELF-DESTRUCT!' : 'FRENZY MODE!', '#ff4444', 28);
+      const text = phase === 3 ? t('selfDestruct') : t('frenzyMode');
+      this.scene.fx.floatingText(this.x, this.y + 60, text, '#ff4444', 28);
       this.scene.cameras.main.flash(300, 255, 0, 0);
       this.behavior.onPhase?.(phase);
     }

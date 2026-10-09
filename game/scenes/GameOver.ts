@@ -4,6 +4,7 @@ import ScoreManager from '../managers/ScoreManager';
 import PixelButton, { pixelText, pixelTitle, sizeTitle } from '../ui/PixelButton';
 import type { CampaignState } from '../managers/LevelManager';
 import { DifficultyLabels, DifficultyLevel } from './MainMenu';
+import { t } from '../utils/i18n';
 
 interface ResultData {
   score: number;
@@ -17,7 +18,7 @@ interface ResultData {
 export default class GameOver extends Phaser.Scene {
   private data_!: ResultData;
 
-  constructor(key = 'GameOver', private titleText = 'GAME OVER', private colors: [string, string, string] = ['#ff8a8a', '#ff1a1a', '#4a0000']) {
+  constructor(key = 'GameOver', private titleKey: 'gameOver' | 'victory' = 'gameOver', private colors: [string, string, string] = ['#ff8a8a', '#ff1a1a', '#4a0000']) {
     super(key);
   }
 
@@ -33,15 +34,17 @@ export default class GameOver extends Phaser.Scene {
     const { score, difficulty, newRecord, campaign } = this.data_;
 
     const background = this.add.tileSprite(0, 0, 1, 1, `bg_${campaign?.level ?? 10}`).setOrigin(0).setAlpha(0.5);
-    const title = pixelTitle(this, this.titleText, ...this.colors);
-    const scoreText = this.add.text(0, 0, `PUNTOS ${score}`, pixelText(16)).setOrigin(0.5);
-    const record = this.add.text(0, 0, newRecord ? '¡NUEVO RECORD!' : '', pixelText(12, '#ffdd33')).setOrigin(0.5);
+    const titleString = t(this.titleKey);
+    const title = pixelTitle(this, titleString, ...this.colors);
+    const scoreText = this.add.text(0, 0, `${t('score')} ${score}`, pixelText(16)).setOrigin(0.5);
+    const record = this.add.text(0, 0, newRecord ? t('newRecord') : '', pixelText(12, '#ffdd33')).setOrigin(0.5);
     if (newRecord) this.tweens.add({ targets: record, alpha: 0.3, duration: 400, yoyo: true, loop: -1 });
 
     // Top 5 local scores with date and difficulty
+    const diffMap = DifficultyLabels();
     const rows = ScoreManager.loadHighScores().slice(0, 5).map((h, i) =>
-      `${i + 1}. ${String(h.score).padStart(6)} ${(DifficultyLabels[h.difficulty as DifficultyLevel] ?? h.difficulty).padEnd(7)} ${h.date}`);
-    const table = this.add.text(0, 0, ['MEJORES PUNTUACIONES', '', ...rows].join('\n'), pixelText(8, '#aaccff', { lineSpacing: 8 })).setOrigin(0.5, 0);
+      `${i + 1}. ${String(h.score).padStart(6)} ${(diffMap[h.difficulty as DifficultyLevel] ?? h.difficulty).padEnd(7)} ${h.date}`);
+    const table = this.add.text(0, 0, [t('highScores'), '', ...rows].join('\n'), pixelText(8, '#aaccff', { lineSpacing: 8 })).setOrigin(0.5, 0);
 
     // Retry the same sector from its auto-save (with at least 3 lives), or a new run after victory.
     const restartGame = () => {
@@ -49,14 +52,14 @@ export default class GameOver extends Phaser.Scene {
       this.scene.start('MainGame', campaign ? { campaign: { ...campaign, lives: Math.max(campaign.lives, 3) } } : { difficulty });
     };
     const toMenu = () => this.scene.start('MainMenu');
-    const restartBtn = new PixelButton(this, campaign ? `REINTENTAR S${campaign.level}` : 'JUGAR DE NUEVO', restartGame, 0x4dd9ff);
+    const restartBtn = new PixelButton(this, campaign ? `${t('retrySector')}${campaign.level}` : t('playAgain'), restartGame, 0x4dd9ff);
     restartBtn.selected = true;
-    const menuBtn = new PixelButton(this, 'MENU', toMenu);
+    const menuBtn = new PixelButton(this, t('menu'), toMenu);
 
     const layout = (width: number, height: number) => {
       const col = Math.min(width - 32, 480);
       background.setSize(width, height);
-      sizeTitle(title, Math.min(col / (this.titleText.length + 1.5), height * 0.09, 56));
+      sizeTitle(title, Math.min(col / (titleString.length + 1.5), height * 0.09, 56));
       title.setPosition(width / 2, height * 0.1 + title.height / 2);
       const below = title.y + title.height / 2;
       scoreText.setStyle(pixelText(col < 400 ? 12 : 16)).setPosition(width / 2, below + height * 0.06);

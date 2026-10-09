@@ -1,79 +1,171 @@
-# Space Shooter Remastered
+<p align="center">
+  <h1 align="center">Space Shooter Remastered v3.0.0</h1>
+</p>
 
-A modernized, clean-code implementation of a classic Space Shooter arcade game, built with **React**, **TypeScript**, and **Phaser 3**.
+<p align="center">
+  <img src="https://img.shields.io/badge/version-v3.0.0-blue.svg?style=for-the-badge" alt="Version 3.0.0" />
+  <img src="https://img.shields.io/badge/platform-Web%20%7C%20Mobile%20%7C%20PWA-9cf.svg?style=for-the-badge" alt="Platform" />
+  <img src="https://img.shields.io/badge/engine-Phaser%203-e65c00.svg?style=for-the-badge" alt="Phaser 3" />
+  <img src="https://img.shields.io/badge/tech-React%2018%20%7C%20TypeScript-3178c6.svg?style=for-the-badge" alt="React & TypeScript" />
+  <img src="https://img.shields.io/badge/languages-ES%20%7C%20EN-green.svg?style=for-the-badge" alt="Bilingual" />
+  <img src="https://img.shields.io/badge/license-MIT-yellow.svg?style=for-the-badge" alt="License MIT" />
+</p>
 
-## 🚀 Features
+---
 
-- **Modern Tech Stack**: Built using React 18 and Phaser 3 for robust performance and scalability.
-- **Responsive Design**: The game canvas automatically resizes to fit any screen (Desktop & Mobile).
-- **Improved Gameplay**:
-  - **Infinite Scrolling Background**: Creates a sense of speed and depth.
-  - **Screen Wrapping**: The ship reappears on the opposite side when crossing borders.
-  - **Physics-based Movement**: Smooth acceleration and drag for a space-like feel.
-  - **Dynamic Spawning**: Enemies spawn across the entire screen width.
-- **Synthesized Audio**: No external audio files required. Sound effects (lasers, explosions) are generated procedurally using the Web Audio API.
-- **Game States**: Distinct Preload, Menu, Gameplay, and Game Over scenes.
+## 🚀 Overview / Resumen
 
-## 🎮 How to Play
+**Space Shooter Remastered v3.0.0** is an uncompromising modern retro arcade space shooter engineered with **React 18**, **TypeScript**, and **Phaser 3**, featuring a zero-asset procedural pixel art pipeline, a 10-sector deep campaign, **9 distinct boss chassis designs + the Apex Leviathan Core**, procedural faction recolors, unique enemy silhouettes with gameplay roles, full dual-language support (**Español / English**), and Web Audio synthwave procedural music.
 
-### Controls
+---
 
-| Action | Desktop (Keyboard) | Mobile / Mouse |
-| :--- | :--- | :--- |
-| **Move** | Arrow Keys or WASD | - |
-| **Shoot** | Spacebar | Click / Tap Screen |
+## 🌟 Key Features (v3.0.0)
 
-### Rules
-1.  **Survive**: Avoid colliding with asteroids (enemies).
-2.  **Score**: Shoot asteroids to gain points (+10 per hit).
-3.  **Lives**: You start with 3 lives. Colliding with an enemy loses a life.
-4.  **Game Over**: The game ends when you lose all 3 lives.
+- **Zero-Asset Pixel Architecture**:
+  - No PNG files needed! Original classic sprites are encoded as palette-indexed pixel matrices in source code.
+  - Runtime geometric compositing, shading, hue shifting, and procedural backdrops.
+- **9 Unique Boss Chassis + Apex Leviathan**:
+  - Every boss features **custom composite geometric frames** (not just palette swaps):
+    1. **Sector 1: GOLIATH-CORE** — Heavy broadside dreadnought with armored flank shields.
+    2. **Sector 2: VIPER-STING** — Raked needle-hull interceptor with forward razor pincers.
+    3. **Sector 3: AEGIS-FORTRESS** — Citadel battleship with reinforced frontal barrier crest.
+    4. **Sector 4: HYDRA-TWIN** — Dual catamaran assault hulls with central bridge.
+    5. **Sector 5: DREAD-MINER** — Spiked industrial mining platform with deployer prongs.
+    6. **Sector 6: PHANTOM-CRUISER** — Stealth phase raider with raked diamond vents and decoys.
+    7. **Sector 7: SOLARIS-CARRIER** — Broad hangar super-carrier with massive flank flight pods.
+    8. **Sector 8: BEHEMOTH-LASER** — Siege laser platform with spinal railgun accelerator.
+    9. **Sector 9: GRAVITY-TITAN** — Singularity dreadnought with dark event-horizon ring chassis.
+    10. **Sector 10: OMNI-LEVIATHAN** — Apex alien flagship with 3 evolving battle phases.
+- **Unique Enemy Silhouette Variations (Not Just Repainted)**:
+  - **Standard Drone (White)**: Baseline weaver recon craft.
+  - **Blinker (Purple)**: Compact telemetry core with phase antennae & teleport ambush.
+  - **Kamikaze (Yellow)**: Streamlined delta dart that locks on and rams at high speed.
+  - **Pod (Blue)**: Armored spherical hull reinforced by a 3-hit energy bubble shield.
+  - **Gunship (Red)**: Heavy military dreadnought firing aimed shots every 2s.
+  - **Spreader (Orange)**: Wide multi-barrel wing platform firing 3–5 shot fans.
+  - **LaserShip (Cyan)**: Heavy spinal railgun lance with charging guidance beam.
+  - **Lancer (Yellow)**: Sleek interceptor fuselage that charges and dashes.
+  - **Splitter (Green)**: Heavy arachnid broodmother that splits into mini-drones upon death.
+  - **Asteroid & Mini-Asteroid**: Drifting obstacles that shatter into fragments.
+  - **Proximity Mine**: Seeking explosive mine detonating into an 8-way ring.
+- **Dual Language Support (Bilingual ES / EN)**:
+  - Complete translations for **Español (ES)** and **English (EN)**.
+  - Instant in-game language toggle button on the main menu bar.
+  - Full localization for UI, menus, settings, threats, guide codex, perks, and ship abilities.
+- **Fleet Hangar (5 Player Ships)**:
+  - **Vanguard**: Balanced stats + 3 Hyper Bombs.
+  - **Striker**: Permanent twin-cannons + 15% fire rate.
+  - **Phantom**: +30% speed + extended hit invulnerability.
+  - **Bulwark**: 7 lives + 8s sector start bubble shield.
+  - **Nova**: Permanent companion homing drone satellite.
+- **Responsive Controls**:
+  - Full Desktop support (WASD / Arrows, Mouse Aim, Space/Click, X/B Bomb, ESC Pause).
+  - Gamepad support (Left stick move, Right stick aim, Triggers fire, Start pause).
+  - Mobile Touch: **Drag** (auto-aim), **Twin-Stick** (floating dials), and **Classic** (buttons).
+- **Procedural Synthesizer**:
+  - 100% Web Audio API procedural sound synthesis (lasers, explosions, alarms, thrusters).
+  - Dynamic tempo-scaled synthwave background combat tracks per sector.
+
+---
+
+## 🎮 How to Play / Controles
+
+### Controls Table
+
+| Action | Desktop (Keyboard & Mouse) | Gamepad | Mobile (Touch) |
+| :--- | :--- | :--- | :--- |
+| **Move / Mover** | <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or Arrows | Left Stick | Drag / Left Stick / Joystick |
+| **Aim / Apuntar** | Mouse Cursor | Right Stick | Auto / Right Stick / Rotate |
+| **Fire / Disparar** | Left Click / <kbd>Space</kbd> | <kbd>R2</kbd> / <kbd>RT</kbd> / <kbd>A</kbd> | Auto / Right Dial / Fire Button |
+| **Hyper Bomb** | Right Click / <kbd>X</kbd> / <kbd>B</kbd> | <kbd>L2</kbd> / <kbd>LT</kbd> / <kbd>B</kbd> | Double Tap / Bomb Button |
+| **Pause / Pausa** | <kbd>ESC</kbd> | <kbd>Start</kbd> | <kbd>II</kbd> Button (Top Right) |
+
+---
 
 ## 🛠️ Architecture
 
-The project is structured for maintainability and scalability:
+```
+Shooter-Space-Phaser/
+├── game/
+│   ├── config.ts              # Phaser 3 Game Configuration
+│   ├── entities/
+│   │   ├── Boss.ts            # State-machine boss engine (10 archetypes)
+│   │   ├── Bullet.ts          # Pooled projectile recycling
+│   │   ├── Enemy.ts           # Unique enemy varieties and behavior logic
+│   │   ├── Player.ts          # Ship kinematics, arsenal, drones, shields
+│   │   └── Ships.ts           # 5 playable ship definitions & stats
+│   ├── generators/
+│   │   ├── BossGenerator.ts   # 9 unique boss hull structures + modules
+│   │   ├── OriginalSprites.ts # Decoded palette matrix tables
+│   │   └── PixelArtGenerator.ts # Geometric compositor, shading, tints
+│   ├── managers/
+│   │   ├── LevelManager.ts    # 10 sector definitions, perks, roster unlocks
+│   │   ├── ParticleManager.ts # Zero-texture graphics particles & fx
+│   │   ├── ScoreManager.ts    # High-score table & multiplier combos
+│   │   └── WaveManager.ts     # Wave choreographies & formation spawns
+│   ├── scenes/
+│   │   ├── Preloader.ts       # Sprite generator & procedural asset baking
+│   │   ├── MainMenu.ts        # Title, difficulty, language toggle
+│   │   ├── MainGame.ts        # Core loop, collisions, HUD integration
+│   │   ├── Pause.ts           # In-game pause modal
+│   │   ├── Guide.ts           # In-game codex (Powers, Enemies, Bosses)
+│   │   ├── Hangar.ts          # Ship selector with live preview & stats
+│   │   ├── LevelClear.ts      # Sector debrief & perk card selection
+│   │   ├── GameOver.ts        # High scores & sector retry
+│   │   └── Victory.ts         # Final campaign victory screen
+│   ├── ui/
+│   │   ├── HUD.ts             # Health, bombs, combo timers, boss bar
+│   │   ├── PixelButton.ts     # Authentic retro pixel button component
+│   │   └── TouchControls.ts   # Drag, Twin-stick, and Classic touch schemes
+│   └── utils/
+│       ├── Synth.ts           # Web Audio API music & SFX procedural engine
+│       └── i18n.ts            # Spanish / English internationalization module
+└── public/
+    └── fonts/
+        └── PressStart2P-Regular.ttf # Arcade typography
+```
 
-- **`App.tsx`**: React wrapper that initializes the Phaser instance and handles cleanup.
-- **`game/config.ts`**: Centralized Phaser game configuration.
-- **`game/scenes/`**: Modular scenes for different game states.
-  - `Preloader.ts`: Handles asset loading (images) and progress bars.
-  - `MainMenu.ts`: Interactive start screen.
-  - `MainGame.ts`: Core logic (physics, entities, scoring).
-  - `GameOver.ts`: Results screen and restart logic.
-- **`game/utils/Synth.ts`**: A singleton utility class for generating sound effects programmatically.
+---
 
-## 📦 Installation
+## 📦 Getting Started / Instalación
 
-1.  Ensure you have Node.js installed.
-2.  Install dependencies:
-    ```bash
-    npm install
-    ```
-3.  Run the development server:
-    ```bash
-    npm start
-    ```
+1. **Prerequisites**: Ensure Node.js (v18+) is installed.
+2. **Install dependencies**:
+   ```bash
+   npm install
+   ```
+3. **Launch dev server**:
+   ```bash
+   npm run dev
+   ```
+4. **Build production bundle**:
+   ```bash
+   npm run build
+   ```
+5. **Run test suite**:
+   ```bash
+   node --experimental-strip-types game/generators/generators.test.ts
+   node --experimental-strip-types game/managers/LevelManager.test.ts
+   node --experimental-strip-types game/managers/ScoreManager.test.ts
+   ```
 
-## 📁 Assets
+---
 
-This game expects the following images in your `public/Img` directory:
+## 📜 Version History
 
-**Player & Bullets:**
-- `ship.png` (Player Ship)
-- `bullet.png` (Player Bullet)
+- **v3.0.0**:
+  - Procedural composite geometries creating **9 unique boss hulls** + Apex Leviathan.
+  - Unique geometric silhouettes for enemy varieties (Blinker, Kamikaze, Spreader, LaserShip, Lancer, Pod, Spiderling).
+  - Bilingual localization engine (**ES / EN**) with instant menu toggle.
+  - Zero-asset runtime rendering with zero external sprite textures.
+  - 10-sector campaign with upgrades, 5 playable ships, and touch control schemes.
+- **v2.0.8**:
+  - Touch control enhancements and responsive UI adjustments.
+- **v1.0.0**:
+  - Initial classic space shooter release with static PNG assets.
 
-**Enemies:**
-- `enemy.png` (Basic Enemy)
-- `enemy-ship.png` (Enemy Ship - Shooter Type)
-- `enemy-weaver.png` (Enemy Weaver - Fast Moving)
-- `bullet-enemy.png` (Enemy Bullet)
+---
 
-**Power-ups:**
-- `power-up-blue.png` (Shield Power-up)
-- `power-up-yellow.png` (Rapid Fire Power-up)
-- `power-up-red.png` (Bomb Power-up)
+## 📄 License
 
-**Environment:**
-- `background.png` (Background)
-
-*Note: If assets are missing, the game will attempt to generate placeholder graphics programmatically.*
+This project is licensed under the [MIT License](LICENSE).

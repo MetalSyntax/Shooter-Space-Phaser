@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
 import { synth } from '../utils/Synth';
 import PixelButton, { pixelText, pixelTitle, sizeTitle } from '../ui/PixelButton';
-import { CampaignState, LevelDef, PERKS, PerkKind, applyPerk, rollPerks, saveCampaign, levelDef } from '../managers/LevelManager';
+import { CampaignState, LevelDef, perkInfo, PerkKind, applyPerk, rollPerks, saveCampaign, levelDef } from '../managers/LevelManager';
 import type { SectorStats } from './MainGame';
+import { t } from '../utils/i18n';
 
 /** "SECTOR CLEARED": stats summary, then pick 1 of 3 sector upgrades and jump to the next sector. */
 export default class LevelClear extends Phaser.Scene {
@@ -24,15 +25,16 @@ export default class LevelClear extends Phaser.Scene {
     synth.playVictoryMusic();
     const next = levelDef(this.level.id + 1);
     const bg = this.add.tileSprite(0, 0, 1, 1, `bg_${next.id}`).setOrigin(0).setAlpha(0.6);
-    const title = pixelTitle(this, 'SECTOR CLEARED', '#9dffb0', '#22cc55', '#06351a');
-    const sub = this.add.text(0, 0, `${this.level.name} · ${this.level.bossName} DESTRUIDO`, pixelText(8, '#c8d0e8')).setOrigin(0.5);
+    const titleString = t('sectorCleared');
+    const title = pixelTitle(this, titleString, '#9dffb0', '#22cc55', '#06351a');
+    const sub = this.add.text(0, 0, `${this.level.name} · ${this.level.bossName} ${t('destroyed')}`, pixelText(8, '#c8d0e8')).setOrigin(0.5);
 
     const { kills, accuracy, bonus } = this.stats;
     const lines = [
-      `ENEMIGOS   ${kills}`,
-      `PRECISION  ${Math.round(accuracy * 100)}%`,
-      `BONUS     +${bonus}`,
-      `PUNTOS     ${this.campaign.score}`,
+      `${t('enemiesKilled').padEnd(11)} ${kills}`,
+      `${t('accuracy').padEnd(11)} ${Math.round(accuracy * 100)}%`,
+      `${t('bonus').padEnd(11)} +${bonus}`,
+      `${t('score').padEnd(11)} ${this.campaign.score}`,
     ];
     // Count the stat lines in one at a time.
     const stats = this.add.text(0, 0, '', pixelText(12, '#ffffff', { lineSpacing: 10 })).setOrigin(0.5, 0);
@@ -41,15 +43,16 @@ export default class LevelClear extends Phaser.Scene {
       synth.playCombo(0);
     }));
 
-    const pickLabel = this.add.text(0, 0, 'ELIGE UNA MEJORA DE SECTOR', pixelText(12, '#ffdd33')).setOrigin(0.5);
+    const pickLabel = this.add.text(0, 0, t('pickPerk'), pixelText(12, '#ffdd33')).setOrigin(0.5);
     const perks = rollPerks();
     const cards = perks.map((perk, i) => {
-      const card = new PixelButton(this, `${i + 1}. ${PERKS[perk].title}\n${PERKS[perk].desc}`, () => this.choose(perk), 0x4dd9ff);
+      const info = perkInfo(perk);
+      const card = new PixelButton(this, `${i + 1}. ${info.title}\n${info.desc}`, () => this.choose(perk), 0x4dd9ff);
       card.setAlpha(0);
       this.tweens.add({ targets: card, alpha: 1, delay: 1300 + i * 150, duration: 250 });
       return card;
     });
-    const nextText = this.add.text(0, 0, `SIGUIENTE: SECTOR ${next.id} · ${next.name}`, pixelText(8, '#8892b0')).setOrigin(0.5);
+    const nextText = this.add.text(0, 0, `${t('nextSector')} ${next.id} · ${next.name}`, pixelText(8, '#8892b0')).setOrigin(0.5);
 
     const kb = this.input.keyboard;
     perks.forEach((perk, i) => kb?.on(`keydown-${['ONE', 'TWO', 'THREE'][i]}`, () => this.choose(perk)));
@@ -57,7 +60,7 @@ export default class LevelClear extends Phaser.Scene {
     const layout = (width: number, height: number) => {
       const col = Math.min(width - 32, 520);
       bg.setSize(width, height);
-      sizeTitle(title, Math.min(col / 15, height * 0.07, 40));
+      sizeTitle(title, Math.min(col / (titleString.length + 1.5), height * 0.07, 40));
       title.setPosition(width / 2, height * 0.08 + title.height / 2);
       sub.setPosition(width / 2, title.y + title.height / 2 + 16);
       stats.setStyle(pixelText(col < 400 ? 8 : 12, '#ffffff', { lineSpacing: 10 })).setPosition(width / 2, sub.y + 24);

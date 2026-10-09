@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { Enemy, Drone, Weaver, Gunship, Spreader, LaserShip, Lancer, Pod, Splitter, Blinker, Swooper, Fighter, Asteroid, Mine, Kamikaze } from '../entities/Enemy';
 import { roster, SHOOTER_KINDS, type EnemyKind, type WaveKind } from './LevelManager';
 import type MainGame from '../scenes/MainGame';
+import { t } from '../utils/i18n';
 
 type Spawn = [delay: number, spawn: () => void];
 
@@ -122,7 +123,7 @@ export default class WaveManager {
     this.lastKind = kind;
     const spawns = this.build(kind);
     this.wave++;
-    this.scene.hud.announce(`WAVE ${this.wave}`);
+    this.scene.hud.announce(`${t('wave')} ${this.wave}`);
     if (this.wave % 2 === 1) this.scene.spawnPowerup(); // a guaranteed drop every other wave
     this.pending = spawns.length;
     this.elapsed = 0;

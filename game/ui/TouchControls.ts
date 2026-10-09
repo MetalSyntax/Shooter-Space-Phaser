@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { t, getLanguage } from '../utils/i18n';
 
 /**
  * Selectable mobile control schemes:
@@ -9,10 +10,17 @@ import Phaser from 'phaser';
 export type ControlScheme = 'drag' | 'twin' | 'classic';
 
 export const SCHEMES: Record<ControlScheme, { label: string; hint: string }> = {
-  drag: { label: 'ARRASTRAR', hint: 'ARRASTRA PARA MOVER · DISPARO AUTOMATICO · DOBLE TOQUE = BOMBA' },
-  twin: { label: 'DOBLE STICK', hint: 'IZQUIERDA: MOVER · DERECHA: APUNTAR Y DISPARAR' },
-  classic: { label: 'CLASICO', hint: 'JOYSTICK + BOTONES' },
+  get drag() {
+    return { label: t('schemeDrag'), hint: t('schemeDragHint') };
+  },
+  get twin() {
+    return { label: t('schemeTwin'), hint: t('schemeTwinHint') };
+  },
+  get classic() {
+    return { label: t('schemeClassic'), hint: t('schemeClassicHint') };
+  },
 };
+
 
 const ORDER: ControlScheme[] = ['drag', 'twin', 'classic'];
 const KEY = 'ss_controls';

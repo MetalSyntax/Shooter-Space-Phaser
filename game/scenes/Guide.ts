@@ -1,54 +1,70 @@
 import Phaser from 'phaser';
 import PixelButton, { pixelText, pixelTitle, sizeTitle } from '../ui/PixelButton';
-import { LEVELS, PERKS, ABILITIES, type LevelDef } from '../managers/LevelManager';
+import { LEVELS, PERKS, ABILITIES, type LevelDef, abilityName } from '../managers/LevelManager';
 import { POWER_DURATIONS } from '../entities/Player';
+import { t, getLanguage } from '../utils/i18n';
 
 type Row = { texture?: string; title: string; color: number; desc: string };
 type Tab = 'powers' | 'enemies' | 'bosses';
 
 const secs = (k: keyof typeof POWER_DURATIONS) => `${POWER_DURATIONS[k] / 1000}S`;
 
-const POWERS: Row[] = [
-  { texture: 'powerup_shield', title: `ESCUDO · ${secs('shield')}`, color: 0x3d7bff, desc: 'ABSORBE IMPACTOS Y DESTRUYE A LOS ENEMIGOS QUE TE CHOCAN' },
-  { texture: 'powerup_rapid', title: `DISPARO RAPIDO · ${secs('rapid')}`, color: 0xffd21f, desc: 'DOBLA LA CADENCIA DE FUEGO' },
-  { texture: 'powerup_bomb', title: 'HYPER BOMB +1', color: 0xff3333, desc: 'CARGA EXTRA (MAX 5). LANZALA CON X, B, CLIC DERECHO O DOBLE TOQUE: BORRA LAS BALAS ENEMIGAS' },
-  { texture: 'powerup_spread', title: `ABANICO · ${secs('spread')}`, color: 0x3dff6e, desc: '3 A 5 PROYECTILES EN ARCO' },
-  { texture: 'powerup_missile', title: `MISILES · ${secs('missile')}`, color: 0xff8a1f, desc: 'MISILES TELEDIRIGIDOS DESDE LAS ALAS' },
-  { texture: 'powerup_drone', title: `DRON · ${secs('drone')}`, color: 0xc8d0e8, desc: 'SATELITE QUE ORBITA Y DISPARA ORBES TELEDIRIGIDOS' },
-  { texture: 'powerup_magnet', title: `IMAN · ${secs('magnet')}`, color: 0xb04dff, desc: 'ATRAE LOS POWER-UPS HACIA TU NAVE' },
-  ...Object.values(PERKS).map(p => ({ title: `MEJORA: ${p.title}`, color: 0x4dd9ff, desc: `${p.desc} · SE ELIGE AL LIMPIAR UN SECTOR` })),
-];
+function getPowers(isEn: boolean): Row[] {
+  return [
+    { texture: 'powerup_shield', title: isEn ? `SHIELD · ${secs('shield')}` : `ESCUDO · ${secs('shield')}`, color: 0x3d7bff, desc: isEn ? 'ABSORBS IMPACTS AND DESTROYS COLLIDING ENEMIES' : 'ABSORBE IMPACTOS Y DESTRUYE A LOS ENEMIGOS QUE TE CHOCAN' },
+    { texture: 'powerup_rapid', title: isEn ? `RAPID FIRE · ${secs('rapid')}` : `DISPARO RAPIDO · ${secs('rapid')}`, color: 0xffd21f, desc: isEn ? 'DOUBLES FIRING RATE' : 'DOBLA LA CADENCIA DE FUEGO' },
+    { texture: 'powerup_bomb', title: isEn ? 'HYPER BOMB +1' : 'HYPER BOMB +1', color: 0xff3333, desc: isEn ? 'EXTRA STOCK (MAX 5). TRIGGER WITH X, B, RIGHT CLICK OR DOUBLE TAP: CLEARS ALL ENEMY BULLETS' : 'CARGA EXTRA (MAX 5). LANZALA CON X, B, CLIC DERECHO O DOBLE TOQUE: BORRA LAS BALAS ENEMIGAS' },
+    { texture: 'powerup_spread', title: isEn ? `SPREAD FAN · ${secs('spread')}` : `ABANICO · ${secs('spread')}`, color: 0x3dff6e, desc: isEn ? '3 TO 5 PROJECTILES IN AN ARC' : '3 A 5 PROYECTILES EN ARCO' },
+    { texture: 'powerup_missile', title: isEn ? `MISSILES · ${secs('missile')}` : `MISILES · ${secs('missile')}`, color: 0xff8a1f, desc: isEn ? 'HOMING MISSILES LAUNCHED FROM SHIP WINGS' : 'MISILES TELEDIRIGIDOS DESDE LAS ALAS' },
+    { texture: 'powerup_drone', title: isEn ? `DRONE · ${secs('drone')}` : `DRON · ${secs('drone')}`, color: 0xc8d0e8, desc: isEn ? 'ESCORT SATELLITE FIRING HOMING PLASMA ORBS' : 'SATELITE QUE ORBITA Y DISPARA ORBES TELEDIRIGIDOS' },
+    { texture: 'powerup_magnet', title: isEn ? `MAGNET · ${secs('magnet')}` : `IMAN · ${secs('magnet')}`, color: 0xb04dff, desc: isEn ? 'DRAWS POWER-UPS DIRECTLY TOWARD YOUR SHIP' : 'ATRAE LOS POWER-UPS HACIA TU NAVE' },
+    ...Object.values(PERKS).map(p => ({
+      title: isEn ? `UPGRADE: ${p.titleEn}` : `MEJORA: ${p.title}`,
+      color: 0x4dd9ff,
+      desc: isEn ? `${p.descEn} · CHOSEN AFTER CLEARING A SECTOR` : `${p.desc} · SE ELIGE AL LIMPIAR UN SECTOR`
+    })),
+  ];
+}
 
 const firstSector = (kind: LevelDef['unlock']) => LEVELS.find(l => l.unlock === kind)?.id ?? 1;
 
-const ENEMIES: Row[] = [
-  { texture: 'en_drone', title: 'DRONE · BLANCO', color: 0xe0e0e0, desc: 'SIN HABILIDAD. VUELA RECTO, EN ZIG-ZAG O EN FORMACION V · SECTOR 1' },
-  { texture: 'en_gunship_red', title: 'GUNSHIP · ROJO', color: ABILITIES.red.color, desc: `${ABILITIES.red.name}: TE APUNTA CADA 2 SEGUNDOS · SECTOR 1` },
-  { texture: 'en_lancer_yellow', title: 'LANCER · AMARILLO', color: ABILITIES.yellow.color, desc: `${ABILITIES.yellow.name}: SE DETIENE, PARPADEA Y SE LANZA HACIA TI · SECTOR ${firstSector('lancer')}` },
-  { texture: 'en_pod_blue', title: 'POD · AZUL', color: ABILITIES.blue.color, desc: `${ABILITIES.blue.name}: SU BURBUJA ABSORBE 3 IMPACTOS · SECTOR ${firstSector('pod')}` },
-  { texture: 'en_gunship_orange', title: 'GUNSHIP · NARANJA', color: ABILITIES.orange.color, desc: `${ABILITIES.orange.name}: RAFAGA DE 3 A 5 DISPAROS · SECTOR ${firstSector('spreader')}` },
-  { texture: 'en_spider_green', title: 'SPIDERLING · VERDE', color: ABILITIES.green.color, desc: `${ABILITIES.green.name}: AL MORIR SUELTA 2 DRONES · SECTOR ${firstSector('splitter')}` },
-  { texture: 'en_drone_purple', title: 'BLINKER · PURPURA', color: ABILITIES.purple.color, desc: `${ABILITIES.purple.name}: SALTA DE LADO Y DISPARA AL REAPARECER · SECTOR ${firstSector('blinker')}` },
-  { texture: 'en_drone_yellow', title: 'KAMIKAZE · AMARILLO', color: ABILITIES.yellow.color, desc: `PERSIGUE Y CHOCA, LLEGA EN ENJAMBRES · SECTOR ${firstSector('kamikaze')}` },
-  { texture: 'en_gunship_cyan', title: 'GUNSHIP · CIAN', color: ABILITIES.cyan.color, desc: `${ABILITIES.cyan.name}: SE DETIENE Y DISPARA UN RAYO ANUNCIADO · SECTOR ${firstSector('laser')}` },
-  { texture: 'asteroid', title: 'ASTEROIDE', color: 0xc8d0e8, desc: 'GIRA A LA DERIVA Y SE ROMPE EN FRAGMENTOS' },
-  { texture: 'en_mine_5', title: 'MINA', color: 0xff3333, desc: 'TE PERSIGUE Y A LOS 3 SEGUNDOS ESTALLA EN 8 PROYECTILES' },
-];
+function getEnemies(isEn: boolean): Row[] {
+  return [
+    { texture: 'en_drone', title: isEn ? 'DRONE · WHITE' : 'DRONE · BLANCO', color: 0xe0e0e0, desc: isEn ? 'STANDARD HULL. FLIES STRAIGHT, ZIG-ZAG OR V-FORMATION · SECTOR 1' : 'SIN HABILIDAD. VUELA RECTO, EN ZIG-ZAG O EN FORMACION V · SECTOR 1' },
+    { texture: 'en_gunship_red', title: isEn ? 'GUNSHIP · RED' : 'GUNSHIP · ROJO', color: ABILITIES.red.color, desc: isEn ? `${ABILITIES.red.nameEn}: AIMS AT YOU EVERY 2 SECONDS · SECTOR 1` : `${ABILITIES.red.name}: TE APUNTA CADA 2 SEGUNDOS · SECTOR 1` },
+    { texture: 'en_lancer_yellow', title: isEn ? 'LANCER · YELLOW' : 'LANCER · AMARILLO', color: ABILITIES.yellow.color, desc: isEn ? `${ABILITIES.yellow.nameEn}: STOPS, CHARGES AND RAMS TOWARD YOU · SECTOR ${firstSector('lancer')}` : `${ABILITIES.yellow.name}: SE DETIENE, PARPADEA Y SE LANZA HACIA TI · SECTOR ${firstSector('lancer')}` },
+    { texture: 'en_pod_blue', title: isEn ? 'POD · BLUE' : 'POD · AZUL', color: ABILITIES.blue.color, desc: isEn ? `${ABILITIES.blue.nameEn}: BUBBLE SHIELD ABSORBS 3 HITS · SECTOR ${firstSector('pod')}` : `${ABILITIES.blue.name}: SU BURBUJA ABSORBE 3 IMPACTOS · SECTOR ${firstSector('pod')}` },
+    { texture: 'en_gunship_orange', title: isEn ? 'GUNSHIP · ORANGE' : 'GUNSHIP · NARANJA', color: ABILITIES.orange.color, desc: isEn ? `${ABILITIES.orange.nameEn}: BURST OF 3 TO 5 SPREAD SHOTS · SECTOR ${firstSector('spreader')}` : `${ABILITIES.orange.name}: RAFAGA DE 3 A 5 DISPAROS · SECTOR ${firstSector('spreader')}` },
+    { texture: 'en_spider_green', title: isEn ? 'SPIDERLING · GREEN' : 'SPIDERLING · VERDE', color: ABILITIES.green.color, desc: isEn ? `${ABILITIES.green.nameEn}: SPLITS INTO 2 ESCORT DRONES ON DEATH · SECTOR ${firstSector('splitter')}` : `${ABILITIES.green.name}: AL MORIR SUELTA 2 DRONES · SECTOR ${firstSector('splitter')}` },
+    { texture: 'en_drone_purple', title: isEn ? 'BLINKER · PURPLE' : 'BLINKER · PURPURA', color: ABILITIES.purple.color, desc: isEn ? `${ABILITIES.purple.nameEn}: TELEPORTS SIDEWAYS AND SHOOTS ON RETURN · SECTOR ${firstSector('blinker')}` : `${ABILITIES.purple.name}: SALTA DE LADO Y DISPARA AL REAPARECER · SECTOR ${firstSector('blinker')}` },
+    { texture: 'en_drone_yellow', title: isEn ? 'KAMIKAZE · YELLOW' : 'KAMIKAZE · AMARILLO', color: ABILITIES.yellow.color, desc: isEn ? 'FAST SWARM DART LOCKING IN FOR IMPACT · SECTOR ${firstSector(\'kamikaze\')}' : `PERSIGUE Y CHOCA, LLEGA EN ENJAMBRES · SECTOR ${firstSector('kamikaze')}` },
+    { texture: 'en_gunship_cyan', title: isEn ? 'GUNSHIP · CYAN' : 'GUNSHIP · CIAN', color: ABILITIES.cyan.color, desc: isEn ? `${ABILITIES.cyan.nameEn}: STOPS AND FIRES TELEGRAPHED LASER BEAM · SECTOR ${firstSector('laser')}` : `${ABILITIES.cyan.name}: SE DETIENE Y DISPARA UN RAYO ANUNCIADO · SECTOR ${firstSector('laser')}` },
+    { texture: 'asteroid', title: isEn ? 'ASTEROID' : 'ASTEROIDE', color: 0xc8d0e8, desc: isEn ? 'TUMBLES DRIFTING AND SPLINTERS INTO FRAGMENTS' : 'GIRA A LA DERIVA Y SE ROMPE EN FRAGMENTOS' },
+    { texture: 'en_mine_5', title: isEn ? 'PROXIMITY MINE' : 'MINA', color: 0xff3333, desc: isEn ? 'HOMES IN AND DETONATES INTO AN 8-WAY RING' : 'TE PERSIGUE Y A LOS 3 SEGUNDOS ESTALLA EN 8 PROYECTILES' },
+  ];
+}
 
-const BOSS_DESC: Record<LevelDef['boss'], string> = {
-  goliath: 'CANON PESADO EN V Y ASTEROIDES QUE LO ORBITAN COMO ESCUDO',
-  viper: 'EMBESTIDAS EN ZIG-ZAG Y ABANICOS DE PUAS DE PLASMA',
-  aegis: 'ORBES GIRATORIOS BLOQUEAN TUS DISPAROS: ATACA POR LOS FLANCOS',
-  hydra: 'DOS TORRETAS ALARES; SI PIERDE UNA DISPARA RAYOS CONCENTRADOS',
-  miner: 'SIEMBRA MINAS QUE ESTALLAN EN ANILLOS',
-  phantom: 'SE TELETRANSPORTA Y CREA SENUELOS CON DISPAROS FALSOS',
-  carrier: 'NAVE NODRIZA QUE DESPLIEGA ENJAMBRES KAMIKAZE',
-  behemoth: 'LASER DE BARRIDO ANUNCIADO CON UNA LINEA GUIA',
-  titan: 'VORTICE GRAVITATORIO QUE TE ATRAE MIENTRAS DISPARA ESPIRALES',
-  leviathan: '3 FASES: FORTALEZA, ESPIRAL (50%) Y AUTODESTRUCCION (20%)',
+const BOSS_DESC: Record<LevelDef['boss'], { es: string; en: string }> = {
+  goliath: { es: 'CANON PESADO EN V Y ASTEROIDES QUE LO ORBITAN COMO ESCUDO', en: 'HEAVY V-CANNON & ORBITING ASTEROID SHIELDS' },
+  viper: { es: 'EMBESTIDAS EN ZIG-ZAG Y ABANICOS DE PUAS DE PLASMA', en: 'ZIG-ZAG RAM DASHES & PLASMA SPIKE FANS' },
+  aegis: { es: 'ORBES GIRATORIOS BLOQUEAN TUS DISPAROS: ATACA POR LOS FLANCOS', en: 'ROTATING ORBS BLOCK SHOTS: ATTACK FROM FLANKS' },
+  hydra: { es: 'DOS TORRETAS ALARES; SI PIERDE UNA DISPARA RAYOS CONCENTRADOS', en: 'TWIN WING TURRETS; DESTROYING ONE TRIGGERS BEAMS' },
+  miner: { es: 'SIEMBRA MINAS QUE ESTALLAN EN ANILLOS', en: 'LAYS PROXIMITY MINES THAT BURST INTO BULLET RINGS' },
+  phantom: { es: 'SE TELETRANSPORTA Y CREA SENUELOS CON DISPAROS FALSOS', en: 'TELEPORTS AND GENERATES HOLOGRAPHIC DECOYS' },
+  carrier: { es: 'NAVE NODRIZA QUE DESPLIEGA ENJAMBRES KAMIKAZE', en: 'CARRIER DEPLOYING PERSISTENT KAMIKAZE SWARMS' },
+  behemoth: { es: 'LASER DE BARRIDO ANUNCIADO CON UNA LINEA GUIA', en: 'SWEEPING MEGA-LASER WITH GUIDE TELEGRAPH LINE' },
+  titan: { es: 'VORTICE GRAVITATORIO QUE TE ATRAE MIENTRAS DISPARA ESPIRALES', en: 'GRAVITATIONAL VORTEX PULLS PLAYER WHILE FIRING SPIRALS' },
+  leviathan: { es: '3 FASES: FORTALEZA, ESPIRAL (50%) Y AUTODESTRUCCION (20%)', en: '3 PHASES: CITADEL, SPIRAL (50%) & SELF-DESTRUCT (20%)' },
 };
 
-const BOSSES: Row[] = LEVELS.map(l => ({ texture: `boss_${l.id}`, title: `S${l.id} · ${l.bossName}`, color: 0xff6666, desc: `${l.name}: ${BOSS_DESC[l.boss]}` }));
+function getBosses(isEn: boolean): Row[] {
+  return LEVELS.map(l => ({
+    texture: `boss_${l.id}`,
+    title: `S${l.id} · ${l.bossName}`,
+    color: 0xff6666,
+    desc: `${l.name}: ${isEn ? BOSS_DESC[l.boss].en : BOSS_DESC[l.boss].es}`
+  }));
+}
 
 /** In-game codex: power-ups, enemies (color = ability) and bosses, in scrollable tabs. */
 export default class Guide extends Phaser.Scene {
@@ -68,12 +84,17 @@ export default class Guide extends Phaser.Scene {
 
   create() {
     const { width, height } = this.scale;
+    const isEn = getLanguage() === 'en';
     this.add.rectangle(0, 0, width, height, 0x050814, 1).setOrigin(0).setInteractive();
-    const title = pixelTitle(this, 'GUIA', '#9ff6ff', '#2f9fff', '#062a4a');
+    const title = pixelTitle(this, t('guide'), '#9ff6ff', '#2f9fff', '#062a4a');
     sizeTitle(title, Math.min(32, width / 10));
     title.setPosition(width / 2, 24 + title.height / 2);
 
-    const tabs: [Tab, string][] = [['powers', 'PODERES'], ['enemies', 'ENEMIGOS'], ['bosses', 'JEFES']];
+    const tabs: [Tab, string][] = [
+      ['powers', t('tabPowers')],
+      ['enemies', t('tabEnemies')],
+      ['bosses', t('tabBosses')],
+    ];
     const col = Math.min(width - 24, 620);
     const tabW = (col - 16) / 3;
     const tabY = title.y + title.height / 2 + 30;
@@ -89,7 +110,7 @@ export default class Guide extends Phaser.Scene {
     const maskShape = this.make.graphics({}).fillRect(0, this.viewTop, width, viewH);
     this.list = this.add.container(0, this.viewTop).setMask(maskShape.createGeometryMask());
 
-    new PixelButton(this, 'VOLVER', () => this.close(), 0xffdd33).layout(Math.min(col, 260), 44, 12).setPosition(width / 2, height - 36);
+    new PixelButton(this, t('back'), () => this.close(), 0xffdd33).layout(Math.min(col, 260), 44, 12).setPosition(width / 2, height - 36);
 
     // Scroll with drag, mouse wheel or arrow keys.
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
@@ -106,7 +127,8 @@ export default class Guide extends Phaser.Scene {
   private show(tab: Tab, buttons: PixelButton[]) {
     buttons.forEach((b, i) => { b.selected = i === ['powers', 'enemies', 'bosses'].indexOf(tab); b.redraw(); });
     this.list.removeAll(true);
-    const rows = tab === 'powers' ? POWERS : tab === 'enemies' ? ENEMIES : BOSSES;
+    const isEn = getLanguage() === 'en';
+    const rows = tab === 'powers' ? getPowers(isEn) : tab === 'enemies' ? getEnemies(isEn) : getBosses(isEn);
     const { width, height } = this.scale;
     const col = Math.min(width - 24, 620);
     const left = (width - col) / 2;

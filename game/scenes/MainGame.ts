@@ -9,9 +9,10 @@ import Boss from "../entities/Boss";
 import WaveManager from "../managers/WaveManager";
 import ParticleManager from "../managers/ParticleManager";
 import ScoreManager from "../managers/ScoreManager";
-import { CampaignState, LevelDef, levelDef, newCampaign, saveCampaign, clearCampaign, LEVELS } from "../managers/LevelManager";
+import { CampaignState, LevelDef, levelDef, newCampaign, saveCampaign, clearCampaign, LEVELS, levelThreat } from "../managers/LevelManager";
 import HUD from "../ui/HUD";
 import { createTouchControls, loadScheme, SCHEMES, TouchInput, ControlScheme } from "../ui/TouchControls";
+import { t, getLanguage } from "../utils/i18n";
 
 type Drop = PowerKind | "bomb";
 const DROPS: Drop[] = ["shield", "rapid", "bomb", "spread", "missile", "drone", "magnet"];
@@ -97,7 +98,8 @@ export default class MainGame extends Phaser.Scene {
     this.fx = new ParticleManager(this);
     const shipId = this.campaign.ship && this.campaign.ship in SHIPS ? this.campaign.ship : "vanguard";
     const ship = SHIPS[shipId];
-    this.hud = new HUD(this, `${DifficultyLabels[this.difficulty]} · S${this.level.id}`, ScoreManager.best()?.score ?? 0, () => this.pauseGame(), `ship_${shipId}`);
+    const diffText = DifficultyLabels()[this.difficulty] ?? this.difficulty;
+    this.hud = new HUD(this, `${diffText} · S${this.level.id}`, ScoreManager.best()?.score ?? 0, () => this.pauseGame(), `ship_${shipId}`);
     this.player = new Player(this, width / 2, height - 100, this.campaign.lives, this.campaign.perks, ship, `ship_${shipId}`);
     if (ship.permanentDrone) this.player.activate("drone", Infinity);
     if (ship.sectorShield) this.player.activate("shield", ship.sectorShield);
@@ -121,7 +123,7 @@ export default class MainGame extends Phaser.Scene {
     this.waves = new WaveManager(this);
     this.waves.start();
     this.hud.announce(`SECTOR ${this.level.id}\n${this.level.name}`, "#ffdd33");
-    this.time.delayedCall(1700, () => this.hud.announce(this.level.threat, this.level.unlock ? "#ff9d4d" : "#c8d0e8", 12));
+    this.time.delayedCall(1700, () => this.hud.announce(levelThreat(this.level), this.level.unlock ? "#ff9d4d" : "#c8d0e8", 12));
     if (this.isTouch) this.time.delayedCall(3400, () => this.hud.announce(SCHEMES[loadScheme()].hint, "#8892b0", 12));
     this.events.on("resume", () => this.setupTouch());
 

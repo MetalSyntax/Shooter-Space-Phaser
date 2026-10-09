@@ -3,6 +3,7 @@ import { synth } from '../utils/Synth';
 import PixelButton, { pixelText, openOverlay } from '../ui/PixelButton';
 import type { CampaignState } from '../managers/LevelManager';
 import { loadScheme, saveScheme, nextScheme, SCHEMES } from '../ui/TouchControls';
+import { t } from '../utils/i18n';
 
 /** Modal overlay launched on top of a paused MainGame. */
 export default class Pause extends Phaser.Scene {
@@ -25,19 +26,19 @@ export default class Pause extends Phaser.Scene {
     const gap = 10;
     const rows = this.sys.game.device.input.touch ? 7 : 6;
     const top = (height - rows * (btnH + gap)) / 2 + btnH / 2 + 24;
-    this.add.text(width / 2, top - btnH - 24, 'PAUSA', pixelText(width < 400 ? 24 : 32, '#4dd9ff', { stroke: '#000', strokeThickness: 6 })).setOrigin(0.5);
+    this.add.text(width / 2, top - btnH - 24, t('pause'), pixelText(width < 400 ? 24 : 32, '#4dd9ff', { stroke: '#000', strokeThickness: 6 })).setOrigin(0.5);
 
     const resume = () => {
       this.scene.resume('MainGame');
       this.scene.stop();
     };
-    const musicLabel = () => `♪ MUSICA: ${synth.musicMuted ? 'OFF' : 'ON'}`;
-    const sfxLabel = () => `SFX: ${synth.sfxMuted ? 'OFF' : 'ON'}`;
-    const ctrlLabel = () => `CONTROLES: ${SCHEMES[loadScheme()].label}`;
+    const musicLabel = () => `♪ ${t('music')}: ${synth.musicMuted ? 'OFF' : 'ON'}`;
+    const sfxLabel = () => `${t('sfx')}: ${synth.sfxMuted ? 'OFF' : 'ON'}`;
+    const ctrlLabel = () => `${t('controlsPrefix')} ${SCHEMES[loadScheme()].label}`;
 
     const items: [string, (b: PixelButton) => void][] = [
-      ['▶ REANUDAR', resume],
-      ['REINICIAR', () => {
+      [t('resume'), resume],
+      [t('restart'), () => {
         this.scene.stop('MainGame');
         this.scene.start('MainGame', { campaign: this.campaign });
       }],
@@ -45,8 +46,8 @@ export default class Pause extends Phaser.Scene {
       [sfxLabel(), b => { synth.setSfxMuted(!synth.sfxMuted); b.setText(sfxLabel()); }],
       // Mobile only: switch control scheme (applied when the game resumes).
       ...(this.sys.game.device.input.touch ? [[ctrlLabel(), (b: PixelButton) => { saveScheme(nextScheme(loadScheme())); b.setText(ctrlLabel()); }] as [string, (b: PixelButton) => void]] : []),
-      ['GUIA', () => openOverlay(this, 'Guide')],
-      ['MENU PRINCIPAL', () => {
+      [t('guide'), () => openOverlay(this, 'Guide')],
+      [t('mainMenu'), () => {
         this.scene.stop('MainGame');
         this.scene.start('MainMenu');
       }],
@@ -66,3 +67,4 @@ export default class Pause extends Phaser.Scene {
     });
   }
 }
+
