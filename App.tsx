@@ -30,9 +30,6 @@ const App: React.FC = () => {
         className="w-full h-full flex justify-center items-center"
         id="game-container"
       />
-      <div className="absolute bottom-4 left-4 text-slate-500 text-xs pointer-events-none select-none">
-        <p>Controls: Arrow Keys / WASD to Move • Space / Click to Shoot</p>
-      </div>
     </div>
   );
 };

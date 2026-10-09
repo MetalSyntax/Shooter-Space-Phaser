@@ -1,618 +1,410 @@
 import Phaser from "phaser";
 import { synth } from "../utils/Synth";
-import { DifficultySettings, DifficultyLevel } from "./MainMenu";
+import { DifficultySettings, DifficultyLevel, DifficultyLabels } from "./MainMenu";
+import Player, { PowerKind, MAX_BOMBS } from "../entities/Player";
+import Bullet from "../entities/Bullet";
+import { SHIPS } from "../entities/Ships";
+import { Enemy } from "../entities/Enemy";
+import Boss from "../entities/Boss";
+import WaveManager from "../managers/WaveManager";
+import ParticleManager from "../managers/ParticleManager";
+import ScoreManager from "../managers/ScoreManager";
+import { CampaignState, LevelDef, levelDef, newCampaign, saveCampaign, clearCampaign, LEVELS } from "../managers/LevelManager";
+import HUD from "../ui/HUD";
+import { createTouchControls, loadScheme, SCHEMES, TouchInput, ControlScheme } from "../ui/TouchControls";
+
+type Drop = PowerKind | "bomb";
+const DROPS: Drop[] = ["shield", "rapid", "bomb", "spread", "missile", "drone", "magnet"];
+const DROP_LABELS: Record<Drop, string> = {
+  shield: "SHIELD", rapid: "RAPID FIRE", bomb: "+1 HYPER BOMB", spread: "SPREAD SHOT",
+  missile: "MISSILES", drone: "HOMING DRONE", magnet: "MAGNET",
+};
+const DROP_CHANCE = 0.07;
+const CRIT_CHANCE = 0.1;
+const BOSS_HP_BY_DIFF: Record<DifficultyLevel, number> = { EASY: 0.8, MEDIUM: 1, HARD: 1.25 };
+
+export interface SectorStats {
+  kills: number;
+  accuracy: number;
+  bonus: number;
+}
 
 export default class MainGame extends Phaser.Scene {
-  private player!: Phaser.Physics.Arcade.Sprite;
-  private cursors?: any;
-  private wasd?: any;
+  // Shared with entities/managers
+  player!: Player;
+  bullets!: Phaser.Physics.Arcade.Group;
+  enemyBullets!: Phaser.Physics.Arcade.Group;
+  enemies!: Phaser.Physics.Arcade.Group;
+  powerups!: Phaser.Physics.Arcade.Group;
+  fx!: ParticleManager;
+  hud!: HUD;
+  touch?: TouchInput;
+  private scheme?: ControlScheme;
+  isTouch = false;
+  level!: LevelDef;
+  campaign!: CampaignState;
+  speedMult = 1;
+  spawnDelay = 700;
 
-  // Groups
-  private bullets!: Phaser.Physics.Arcade.Group;
-  private enemyBullets!: Phaser.Physics.Arcade.Group;
-  private enemies!: Phaser.Physics.Arcade.Group;
-  private powerups!: Phaser.Physics.Arcade.Group;
+  private difficulty: DifficultyLevel = "MEDIUM";
+  private scoreManager!: ScoreManager;
+  private waves!: WaveManager;
+  private boss?: Boss;
+  private ended = false;
+  private kills = 0;
+  private hits = 0;
 
-  // Visuals
   private background!: Phaser.GameObjects.TileSprite;
-  private starfield!: Phaser.GameObjects.TileSprite;
-  private shieldVisual!: Phaser.GameObjects.Arc;
-
-  // UI
-  private score: number = 0;
-  private scoreText!: Phaser.GameObjects.Text;
-  private lives: number = 5;
-  private livesText!: Phaser.GameObjects.Text;
-  private difficultyText!: Phaser.GameObjects.Text;
-
-  // Logic
-  private lastFired: number = 0;
-  private baseFireDelay: number = 200;
-  private spawnTimer!: Phaser.Time.TimerEvent;
-  private settings: any;
-
-  // Powerups State
-  private hasShield: boolean = false;
-  private rapidFireActive: boolean = false;
-
-  // Boss State
-  private bossSpawned: boolean = false;
-  private boss!: Phaser.Physics.Arcade.Sprite;
-  private bossHealth: number = 20;
-  private bossMaxHealth: number = 20;
-  private bossHealthBar!: Phaser.GameObjects.Graphics;
-
-  // Touch Controls
-  private joystickBase!: Phaser.GameObjects.Arc;
-  private joystickThumb!: Phaser.GameObjects.Arc;
-  private joystickPointer: Phaser.Input.Pointer | null = null;
-  private joystickForce: { x: number; y: number } = { x: 0, y: 0 };
-
-  // Buttons
-  private rotateLeftBtn!: Phaser.GameObjects.Container;
-  private rotateRightBtn!: Phaser.GameObjects.Container;
-  private fireBtn!: Phaser.GameObjects.Container;
-  private menuBtn!: Phaser.GameObjects.Image;
-
-  private touchControlsVisible: boolean = false;
-  private playerRotation: number = -90;
 
   constructor() {
     super("MainGame");
   }
 
-  init(data: { difficulty: DifficultyLevel }) {
-    const diff = data.difficulty || "MEDIUM";
-    this.settings = DifficultySettings[diff];
-    this.lives = 5;
-    this.score = 0;
-    this.hasShield = false;
-    this.rapidFireActive = false;
-    this.playerRotation = -90;
-    this.bossSpawned = false;
-    this.bossHealth = 20;
+  init(data: { campaign?: CampaignState; difficulty?: DifficultyLevel }) {
+    this.campaign = data.campaign ?? newCampaign(data.difficulty || "MEDIUM");
+    const diff = this.campaign.difficulty as DifficultyLevel;
+    this.difficulty = diff in DifficultySettings ? diff : "MEDIUM";
+    this.level = levelDef(this.campaign.level);
+    const settings = DifficultySettings[this.difficulty];
+    // Each sector ramps speed and spawn rate on top of the chosen difficulty.
+    this.speedMult = settings.speedMultiplier * (1 + (this.level.id - 1) * 0.05);
+    this.spawnDelay = settings.spawnDelay * (1 - (this.level.id - 1) * 0.04);
+    this.boss = undefined;
+    this.touch = undefined;
+    this.scheme = undefined;
+    this.ended = false;
+    this.kills = 0;
+    this.hits = 0;
   }
 
   create() {
-    const { width, height } = this.cameras.main;
+    const { width, height } = this.scale;
+    this.isTouch = this.sys.game.device.input.touch;
+    this.scoreManager = new ScoreManager(DifficultySettings[this.difficulty].scoreMulti, this.campaign.score);
+    saveCampaign(this.campaign); // auto-save at the start of every sector
+    this.input.mouse?.disableContextMenu();
 
-    // Enable Multi-touch
-    this.input.addPointer(3);
+    // Procedural sector backdrop + themed parallax props
+    this.background = this.add.tileSprite(0, 0, width, height, `bg_${this.level.id}`).setOrigin(0, 0).setScrollFactor(0).setDepth(-10);
+    this.setupBackgroundFx();
 
-    // 1. Backgrounds
-    this.starfield = this.add.tileSprite(0, 0, width, height, "star").setOrigin(0, 0).setAlpha(0.3);
-    this.background = this.add.tileSprite(0, 0, width, height, "background").setOrigin(0, 0).setAlpha(0.1);
-
-    // 2. Player
-    this.player = this.physics.add.sprite(width / 2, height - 100, "ship");
-    this.player.setAngle(-90);
-    this.player.setDamping(true);
-    this.player.setDrag(0.85);
-    this.player.setMaxVelocity(250);
-    this.player.setCollideWorldBounds(true);
-
-    // Shield Visual
-    this.shieldVisual = this.add.circle(0, 0, 30, 0x0000ff, 0.3);
-    this.shieldVisual.setStrokeStyle(2, 0x00ffff);
-    this.shieldVisual.setVisible(false);
-
-    // 3. Groups
-    this.bullets = this.physics.add.group({ classType: Phaser.Physics.Arcade.Image, defaultKey: "bullet", maxSize: 30, runChildUpdate: true });
-    this.enemyBullets = this.physics.add.group({ classType: Phaser.Physics.Arcade.Image, defaultKey: "enemyBullet", maxSize: 50, runChildUpdate: true });
-    this.enemies = this.physics.add.group({ runChildUpdate: true });
+    // Groups (bullets are pooled and recycle themselves off-screen)
+    this.bullets = this.physics.add.group({ classType: Bullet, maxSize: 150, runChildUpdate: true });
+    this.enemyBullets = this.physics.add.group({ classType: Bullet, maxSize: 300, runChildUpdate: true });
+    this.enemies = this.physics.add.group();
     this.powerups = this.physics.add.group();
 
-    // 4. Inputs
-    if (this.input.keyboard) {
-      this.cursors = this.input.keyboard.createCursorKeys();
-      this.wasd = this.input.keyboard.addKeys("W,S,A,D,Q,E");
-    }
+    this.fx = new ParticleManager(this);
+    const shipId = this.campaign.ship && this.campaign.ship in SHIPS ? this.campaign.ship : "vanguard";
+    const ship = SHIPS[shipId];
+    this.hud = new HUD(this, `${DifficultyLabels[this.difficulty]} · S${this.level.id}`, ScoreManager.best()?.score ?? 0, () => this.pauseGame(), `ship_${shipId}`);
+    this.player = new Player(this, width / 2, height - 100, this.campaign.lives, this.campaign.perks, ship, `ship_${shipId}`);
+    if (ship.permanentDrone) this.player.activate("drone", Infinity);
+    if (ship.sectorShield) this.player.activate("shield", ship.sectorShield);
+    this.setupTouch();
+    this.hud.setLives(this.player.lives);
+    this.hud.setBombs(this.player.bombs);
+    this.hud.setScore(this.scoreManager.score);
 
-    // 5. Collisions
-    this.physics.add.overlap(this.bullets, this.enemies, this.hitEnemy, undefined, this);
-    this.physics.add.overlap(this.player, this.enemies, this.hitPlayer, undefined, this);
-    this.physics.add.overlap(this.player, this.enemyBullets, this.hitPlayer, undefined, this);
-    this.physics.add.overlap(this.player, this.powerups, this.collectPowerup, undefined, this);
+    // Collisions
+    this.physics.add.overlap(this.bullets, this.enemies, (b, e) => this.hitEnemy(b as Bullet, e as Enemy));
+    this.physics.add.overlap(this.player, this.enemies, (_p, e) => this.onPlayerContact(e as Enemy));
+    this.physics.add.overlap(this.player, this.enemyBullets, (_p, b) => this.onPlayerContact(b as Bullet));
+    this.physics.add.overlap(this.player, this.powerups, (_p, pu) => this.collectPowerup(pu as Phaser.Physics.Arcade.Image));
 
-    // 6. UI
-    this.scoreText = this.add.text(20, 20, "Score: 0", { fontSize: "20px", color: "#fff", fontFamily: "Arial" });
-    this.livesText = this.add.text(width - 120, 20, "Lives: 5", { fontSize: "20px", color: "#fff", fontFamily: "Arial" });
+    // Pause: ESC, on-screen button, or gamepad START
+    this.input.keyboard?.on("keydown-ESC", () => this.pauseGame());
+    this.input.gamepad?.on("down", (_pad: Phaser.Input.Gamepad.Gamepad, button: Phaser.Input.Gamepad.Button) => {
+      if (button.index === 9) this.pauseGame();
+    });
 
-    const diffName = Object.keys(DifficultySettings).find((key) => DifficultySettings[key as DifficultyLevel] === this.settings);
-    this.difficultyText = this.add.text(width / 2, 20, `${diffName} MODE`, { fontSize: "16px", color: "#ffff00" }).setOrigin(0.5, 0);
+    this.waves = new WaveManager(this);
+    this.waves.start();
+    this.hud.announce(`SECTOR ${this.level.id}\n${this.level.name}`, "#ffdd33");
+    this.time.delayedCall(1700, () => this.hud.announce(this.level.threat, this.level.unlock ? "#ff9d4d" : "#c8d0e8", 12));
+    if (this.isTouch) this.time.delayedCall(3400, () => this.hud.announce(SCHEMES[loadScheme()].hint, "#8892b0", 12));
+    this.events.on("resume", () => this.setupTouch());
 
-    this.menuBtn = this.add.image(20, 60, 'menu_btn')
-      .setOrigin(0, 0.1)
-      .setScrollFactor(0)
-      .setInteractive({ useHandCursor: true })
-      .setScale(0.55)
-      .on('pointerdown', () => this.scene.start('MainMenu'));
-
-    if (this.input.keyboard) {
-      this.input.keyboard.on('keydown-ESC', () => {
-        this.scene.start('MainMenu');
-      });
-    }
-
-    // 7. Spawner
-    this.spawnTimer = this.time.addEvent({ delay: this.settings.spawnDelay, callback: this.spawnSequence, callbackScope: this, loop: true });
-
-    // 8. Touch Controls
-    this.createTouchControls();
-
-    // Force initial positioning
     this.handleResize({ width, height });
-
     this.scale.on("resize", this.handleResize, this);
+    this.events.once("shutdown", () => this.scale.off("resize", this.handleResize, this));
+
+    synth.playCombatMusic(this.level.bpm, this.level.id);
   }
 
   update(time: number, delta: number) {
-    this.background.tilePositionY -= 2;
-    this.starfield.tilePositionY -= 0.5;
+    this.background.tilePositionY -= 0.6 + this.level.id * 0.05;
+    if (this.level.fx === "distortion") this.background.tilePositionX = Math.sin(time / 700) * 12;
 
-    if (!this.player.active) return;
-
-    if (this.hasShield) {
-      this.shieldVisual.setPosition(this.player.x, this.player.y);
-    }
-
-    this.updateJoystick();
-
-    // Movement
-    const accel = 400;
-    let accelX = 0;
-    let accelY = 0;
-
-    if (this.cursors.left.isDown || this.wasd.A.isDown) accelX = -accel;
-    else if (this.cursors.right.isDown || this.wasd.D.isDown) accelX = accel;
-
-    if (this.cursors.up.isDown || this.wasd.W.isDown) accelY = -accel;
-    else if (this.cursors.down.isDown || this.wasd.S.isDown) accelY = accel;
-
-    if (this.joystickForce.x !== 0 || this.joystickForce.y !== 0) {
-      accelX = this.joystickForce.x * accel;
-      accelY = this.joystickForce.y * accel;
-    }
-
-    this.player.setAccelerationX(accelX);
-    this.player.setAccelerationY(accelY);
-
-    // Rotation
-    if (this.wasd.Q.isDown) this.playerRotation -= 3;
-    else if (this.wasd.E.isDown) this.playerRotation += 3;
-
-    this.player.setAngle(this.playerRotation);
-
-    // Shoot (Keyboard)
-    if (this.cursors.space.isDown && time > this.lastFired) {
-      this.fireBullet(time);
-    }
-
-    // Enemy Logic
-    this.enemies.children.iterate((enemy: any) => {
-      if (enemy && enemy.active) {
-        if (enemy.getData("type") === "weaver") enemy.x += Math.sin(time / 200) * 3;
-        if (enemy.getData("type") === "shooter") {
-          if (time > enemy.getData("nextShot")) {
-            this.fireEnemyBullet(enemy);
-            enemy.setData("nextShot", time + 2000);
-          }
-        }
-        if (enemy.y > this.cameras.main.height + 50) enemy.destroy();
-      }
-      return true;
-    });
-
-    // Boss Logic
-    if (this.bossSpawned && this.boss && this.boss.active) {
-      // Boss movement (simple side to side)
-      this.boss.x = this.cameras.main.width / 2 + Math.sin(time / 1000) * (this.cameras.main.width / 3);
-
-      // Boss shooting
-      if (time > this.boss.getData("nextShot")) {
-        this.fireEnemyBullet(this.boss);
-        this.boss.setData("nextShot", time + 1500); // Faster shooting than normal enemies
-      }
-    }
-
-    this.cleanup();
+    this.player.update(time, delta);
+    this.waves.update(delta);
+    this.scoreManager.update(delta);
+    this.fx.update(delta);
+    this.hud.update({ mult: this.scoreManager.multiplier, timer: this.scoreManager.comboTimer }, this.player.powers, this.boss ? -1 : this.waves.progress);
+    this.cleanupPowerups();
   }
 
-  private fireBullet(time: number) {
-    const angleRad = Phaser.Math.DegToRad(this.playerRotation);
-    const offsetDistance = 20;
-    const bulletX = this.player.x + Math.cos(angleRad) * offsetDistance;
-    const bulletY = this.player.y + Math.sin(angleRad) * offsetDistance;
-
-    const bullet = this.bullets.get(bulletX, bulletY, "bullet");
-    if (bullet) {
-      bullet.setActive(true);
-      bullet.setVisible(true);
-      bullet.setAngle(this.playerRotation);
-      const speed = 600;
-      bullet.setVelocity(Math.cos(angleRad) * speed, Math.sin(angleRad) * speed);
-      this.lastFired = time + (this.rapidFireActive ? this.baseFireDelay / 2 : this.baseFireDelay);
-      synth.playLaser();
-    }
-  }
-
-  // --- TOUCH CONTROLS ---
-
-  private createTouchControls() {
-    // 1. JOYSTICK
-    this.joystickBase = this.add.circle(0, 0, 50, 0x333333, 0.5)
-      .setStrokeStyle(2, 0x666666).setScrollFactor(0).setDepth(1000).setInteractive();
-
-    this.joystickThumb = this.add.circle(0, 0, 25, 0x00ff00, 0.7)
-      .setStrokeStyle(2, 0x00ffff).setScrollFactor(0).setDepth(1001);
-
-    this.joystickBase.on('pointerdown', (pointer: Phaser.Input.Pointer) => { this.joystickPointer = pointer; });
-    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-      if (this.joystickPointer === pointer) this.updateJoystickPos(pointer);
-    });
-    this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
-      if (this.joystickPointer === pointer) {
-        this.joystickPointer = null;
-        this.joystickThumb.setPosition(this.joystickBase.x, this.joystickBase.y);
-        this.joystickForce = { x: 0, y: 0 };
-      }
-    });
-
-    // 2. ROTATION BUTTONS
-    this.rotateLeftBtn = this.createButton('↶', 0x00ffff, () => {
-      this.tweens.add({ targets: this, playerRotation: this.playerRotation - 15, duration: 100, ease: 'Linear' });
-    });
-
-    this.rotateRightBtn = this.createButton('↷', 0x00ffff, () => {
-      this.tweens.add({ targets: this, playerRotation: this.playerRotation + 15, duration: 100, ease: 'Linear' });
-    });
-
-    // 3. FIRE BUTTON
-    this.fireBtn = this.createButton('🔥', 0xff0000, () => {
-      this.fireBullet(this.time.now);
-    });
-
-    let fireInterval: Phaser.Time.TimerEvent | null = null;
-    this.fireBtn.on('pointerdown', () => {
-      fireInterval = this.time.addEvent({
-        delay: this.rapidFireActive ? this.baseFireDelay / 2 : this.baseFireDelay,
-        callback: () => this.fireBullet(this.time.now), loop: true
+  /** Themed background behavior per sector (props drifting by, lightning, pulse...). */
+  private setupBackgroundFx() {
+    const { decor, fx } = this.level;
+    if (decor) {
+      this.time.addEvent({
+        delay: 2600, loop: true, startAt: 2000,
+        callback: () => {
+          const { width, height } = this.scale;
+          const s = this.add.image(Phaser.Math.Between(0, width), -80, `decor_${decor}`)
+            .setDepth(-5).setAlpha(Phaser.Math.FloatBetween(0.25, 0.5)).setScale(Phaser.Math.FloatBetween(0.6, 1.3))
+            .setAngle(decor === "rings" || decor === "structures" ? 0 : Phaser.Math.Between(0, 360));
+          this.tweens.add({ targets: s, y: height + 120, angle: s.angle + Phaser.Math.Between(-40, 40), duration: Phaser.Math.Between(12000, 20000), onComplete: () => s.destroy() });
+        },
       });
+    }
+    if (fx === "lightning") {
+      this.time.addEvent({ delay: 5000, loop: true, callback: () => { if (Math.random() < 0.7) this.cameras.main.flash(120, 255, 140, 90); } });
+    }
+    if (fx === "pulse") this.tweens.add({ targets: this.background, alpha: 0.6, duration: 60000 / this.level.bpm, yoyo: true, loop: -1 });
+    if (fx === "gravity") this.tweens.add({ targets: this.background, tileScaleX: 1.08, tileScaleY: 1.08, duration: 3000, yoyo: true, loop: -1, ease: "Sine.InOut" });
+  }
+
+  /** Builds the selected mobile scheme; rebuilt on resume if it was changed in the pause menu. */
+  private setupTouch() {
+    if (!this.isTouch) return;
+    const scheme = loadScheme();
+    if (scheme === this.scheme && this.touch) return;
+    this.touch?.destroy();
+    this.scheme = scheme;
+    this.touch = createTouchControls(this, scheme, {
+      onRotate: deg => this.player.rotateBy(deg),
+      onBomb: () => this.player.useBomb(),
+      ship: () => ({ x: this.player.x, y: this.player.y }),
     });
-
-    const stopFire = () => { if (fireInterval) { fireInterval.remove(); fireInterval = null; } };
-    this.fireBtn.on('pointerup', stopFire);
-    this.fireBtn.on('pointerout', stopFire);
+    this.touch.layout(this.scale.width, this.scale.height);
   }
 
-  private createButton(label: string, color: number, onClick: () => void): Phaser.GameObjects.Container {
-    const container = this.add.container(0, 0);
-    container.setScrollFactor(0).setDepth(1000);
-    const hitArea = new Phaser.Geom.Circle(0, 0, 45); // Slightly smaller hit area to prevent overlap
-    const bg = this.add.circle(0, 0, 35, 0x333333, 0.8).setStrokeStyle(2, color);
-    const text = this.add.text(0, 0, label, { fontSize: '32px', color: '#ffffff' }).setOrigin(0.5);
-    container.add([bg, text]);
-    container.setInteractive(hitArea, Phaser.Geom.Circle.Contains);
-    container.on('pointerdown', () => { bg.setFillStyle(color, 0.5); container.setScale(0.9); onClick(); });
-    container.on('pointerup', () => { bg.setFillStyle(0x333333, 0.8); container.setScale(1.0); });
-    container.on('pointerout', () => { bg.setFillStyle(0x333333, 0.8); container.setScale(1.0); });
-    return container;
+  private pauseGame() {
+    if (this.ended || !this.scene.isActive()) return;
+    this.scene.launch("Pause", { campaign: this.campaign });
+    this.scene.pause();
   }
 
-  private updateJoystickPos(pointer: Phaser.Input.Pointer) {
-    const baseX = this.joystickBase.x;
-    const baseY = this.joystickBase.y;
-    const angle = Phaser.Math.Angle.Between(baseX, baseY, pointer.x, pointer.y);
-    const distance = Math.min(Phaser.Math.Distance.Between(baseX, baseY, pointer.x, pointer.y), 50);
-    const thumbX = baseX + Math.cos(angle) * distance;
-    const thumbY = baseY + Math.sin(angle) * distance;
-    this.joystickThumb.setPosition(thumbX, thumbY);
-    this.joystickForce.x = (thumbX - baseX) / 50;
-    this.joystickForce.y = (thumbY - baseY) / 50;
+  // --- API used by entities/managers ---
+
+  countWaveEnemies(): number {
+    return (this.enemies.getChildren() as Enemy[]).filter(e => e.active && !e.bossPart).length;
   }
 
-  private updateJoystick() {
-    if (!this.joystickPointer) {
-      this.joystickForce = { x: 0, y: 0 };
-      this.joystickThumb.setPosition(this.joystickBase.x, this.joystickBase.y);
-    }
+  /** Default texture = the sector's boss-colored bullet; regular enemies pass their ability color. */
+  fireEnemyBullet(x: number, y: number, angle: number, speed = 250, sound = true, fake = false, texture = `eb_${this.level.id}`): Bullet | null {
+    const bullet = this.enemyBullets.get() as Bullet | null;
+    if (!bullet) return null;
+    bullet.fire(x, y, angle, speed * (0.85 + this.speedMult * 0.1), { texture, fake });
+    if (sound) synth.playEnemyShoot();
+    return bullet;
   }
 
-  // --- HELPERS ---
-
-  private fireEnemyBullet(enemy: Phaser.GameObjects.Sprite) {
-    const bullet = this.enemyBullets.get(enemy.x, enemy.y + 20, "enemyBullet");
-    if (bullet) {
-      bullet.setActive(true);
-      bullet.setVisible(true);
-      this.physics.moveToObject(bullet, this.player, 250);
-      bullet.setRotation(Phaser.Math.Angle.Between(enemy.x, enemy.y, this.player.x, this.player.y) + Math.PI / 2);
-      synth.playEnemyShoot();
-    }
+  fireEnemyBulletAt(x: number, y: number, speed = 250, fake = false) {
+    this.fireEnemyBullet(x, y, Phaser.Math.Angle.Between(x, y, this.player.x, this.player.y), speed, true, fake);
   }
 
-  private spawnSequence() {
-    if (this.bossSpawned) return; // Stop spawning normal enemies if boss is here
-
-    if (this.score >= 1000 && !this.bossSpawned) {
-      this.spawnBoss();
-      return;
-    }
-
-    const { width } = this.cameras.main;
-    const rand = Math.random();
-    const speedMult = this.settings.speedMultiplier;
-    let type = "basic", texture = "enemy", velocityY = 150 * speedMult;
-
-    if (rand > 0.8) { type = "shooter"; texture = "enemyShip"; velocityY = 80 * speedMult; }
-    else if (rand > 0.6) { type = "weaver"; texture = "enemyWeaver"; velocityY = 200 * speedMult; }
-
-    const x = Phaser.Math.Between(30, width - 30);
-    const enemy = this.enemies.create(x, -50, texture);
-    enemy.setVelocityY(velocityY);
-    enemy.setData("type", type);
-    enemy.setData("nextShot", 0);
-
-    if (Math.random() < 0.05) this.spawnPowerup();
-  }
-
-  private spawnBoss() {
-    this.bossSpawned = true;
-    const { width } = this.cameras.main;
-
-    // Clear existing enemies
-    this.enemies.clear(true, true);
-    this.enemyBullets.clear(true, true);
-
-    // Create Boss
-    this.boss = this.physics.add.sprite(width / 2, 100, 'boss');
-    this.boss.setScale(1.5);
-    this.boss.setCollideWorldBounds(true);
-    this.boss.setData("nextShot", 0);
-    this.bossMaxHealth = 20; // Ensure it withstands 20 bullets
-    this.bossHealth = this.bossMaxHealth;
-
-    // Create Health Bar
-    this.bossHealthBar = this.add.graphics();
-    this.updateBossHealthBar();
-
-    // Add collision with bullets - FIXED: Bind directly to ensure context
-    this.physics.add.overlap(this.bullets, this.boss, this.hitBoss, undefined, this);
-
-    // Add collision with player
-    this.physics.add.overlap(this.player, this.boss, this.hitPlayer, undefined, this);
-
-    // Boss entrance animation
-    this.tweens.add({
-      targets: this.boss,
-      y: 150,
-      duration: 2000,
-      ease: 'Power2'
-    });
-
-    // Warning flash
-    this.cameras.main.flash(1000, 255, 0, 0);
-  }
-
-  // FIXED: Renamed params to generic object to handle argument flipping
-  private hitBoss(obj1: any, obj2: any) {
-    let bullet = obj1;
-    let boss = obj2;
-
-    // CRITICAL FIX: Auto-detect which parameter is the boss
-    // Phaser sometimes flips arguments if one is a Group and other is a Sprite
-    if (obj1 === this.boss) {
-      boss = obj1;
-      bullet = obj2;
-    }
-
-    // Ensure both exist and are active before processing
-    if (bullet && boss && bullet.active && boss.active) {
-      bullet.setActive(false).setVisible(false);
-      bullet.destroy();
-
-      this.bossHealth--;
-      this.updateBossHealthBar();
-
-      // Flash boss red and Shake (Scale only to avoid conflict with update loop)
-      boss.setTint(0xff0000);
-      this.cameras.main.shake(100, 0.005);
-
-      // Use a safe tween that won't break physics
-      this.tweens.add({
-        targets: boss,
-        scaleX: 1.6, // Slight scale up
-        scaleY: 1.6,
-        duration: 50,
-        yoyo: true
-      });
-
-      this.time.delayedCall(100, () => {
-        if (boss && boss.active) boss.clearTint();
-      });
-
-      if (this.bossHealth <= 0) {
-        this.victory();
-      } else {
-        synth.playExplosion(); // Small explosion sound for hit
-      }
-    }
-  }
-
-  private updateBossHealthBar() {
-    if (!this.bossHealthBar) return;
-
-    const width = 200;
-    const height = 20;
-    const x = this.cameras.main.width / 2 - width / 2;
-    const y = 50; // Top of screen
-
-    this.bossHealthBar.clear();
-
-    // Background
-    this.bossHealthBar.fillStyle(0x000000, 0.5);
-    this.bossHealthBar.fillRect(x, y, width, height);
-
-    // Health
-    const percentage = Phaser.Math.Clamp(this.bossHealth / this.bossMaxHealth, 0, 1);
-    const color = percentage > 0.5 ? 0x00ff00 : percentage > 0.25 ? 0xffff00 : 0xff0000;
-
-    this.bossHealthBar.fillStyle(color, 1);
-    this.bossHealthBar.fillRect(x, y, width * percentage, height);
-
-    // Border
-    this.bossHealthBar.lineStyle(2, 0xffffff);
-    this.bossHealthBar.strokeRect(x, y, width, height);
-  }
-
-  private victory() {
-    if (this.bossHealthBar) this.bossHealthBar.destroy();
-
-    // Safely destroy boss
-    if (this.boss) {
-      this.boss.destroy();
-    }
-
-    this.enemies.clear(true, true);
-    this.enemyBullets.clear(true, true);
-    this.bullets.clear(true, true);
-    synth.playPowerUp(); // Victory sound?
-    this.scene.start("Victory", { score: this.score });
-  }
-
-  private spawnPowerup() {
-    const { width } = this.cameras.main;
-    const types = ["powerup_shield", "powerup_rapid", "powerup_bomb"];
-    const type = Phaser.Utils.Array.GetRandom(types);
-    const pu = this.powerups.create(Phaser.Math.Between(30, width - 30), -50, type);
-    pu.setVelocityY(100);
-    pu.setData("type", type);
-  }
-
-  private collectPowerup(player: any, powerup: any) {
-    const type = powerup.getData("type");
-    powerup.destroy();
-    synth.playPowerUp();
-    if (type === "powerup_shield") this.activateShield();
-    else if (type === "powerup_rapid") this.activateRapidFire();
-    else if (type === "powerup_bomb") this.activateBomb();
-  }
-
-  private activateShield() {
-    this.hasShield = true;
-    this.shieldVisual.setVisible(true);
-    this.time.delayedCall(5000, () => { this.hasShield = false; this.shieldVisual.setVisible(false); });
-  }
-
-  private activateRapidFire() {
-    this.rapidFireActive = true;
-    this.time.delayedCall(4000, () => { this.rapidFireActive = false; });
-  }
-
-  private activateBomb() {
-    synth.playBomb();
-    this.cameras.main.flash(500, 255, 255, 255);
-    this.enemies.clear(true, true);
-    this.enemyBullets.clear(true, true);
-  }
-
-  private hitEnemy(bullet: any, enemy: any) {
-    if (bullet.active && enemy.active) {
-      // Safety check: Ensure we are not destroying the boss
-      if (enemy === this.boss) return;
-
-      const explosion = this.add.circle(enemy.x, enemy.y, 5, 0xffaa00);
-      this.tweens.add({ targets: explosion, scale: 3, alpha: 0, duration: 200, onComplete: () => explosion.destroy() });
-      bullet.destroy();
-      enemy.destroy();
-      this.score += 10 * this.settings.scoreMulti;
-      this.scoreText.setText(`Score: ${this.score}`);
-      synth.playExplosion();
-    }
-  }
-
-  private hitPlayer(player: any, danger: any) {
-    if (this.hasShield) {
-      if (danger === this.boss) {
-        // Bounce boss back slightly if shield hits it
-        this.tweens.add({ targets: this.boss, y: this.boss.y - 50, duration: 200 });
-      } else {
-        danger.destroy();
-      }
-      return;
-    }
-
-    if (player.active && danger.active) {
-      if (danger === this.boss) {
-        // If player hits boss, don't destroy boss!
-        // Just damage player and maybe push player/boss apart
-        this.tweens.add({ targets: this.boss, y: this.boss.y - 30, duration: 200 });
-      } else {
-        danger.destroy();
-      }
-
-      this.lives--;
-      this.livesText.setText(`Lives: ${this.lives}`);
-      synth.playExplosion();
-      this.cameras.main.shake(200, 0.01);
-      this.player.setTint(0xff0000);
-      this.time.delayedCall(200, () => this.player.clearTint());
-      if (this.lives <= 0) this.gameOver();
-    }
-  }
-
-  private cleanup() {
-    const { height } = this.cameras.main;
-    const killY = height + 100;
-    const clean = (g: Phaser.Physics.Arcade.Group) => {
-      g.children.iterate((c: any) => {
-        if (c && c.active && (c.y > killY || c.y < -100)) c.destroy();
-        return true;
-      });
+  nearestTarget(x: number, y: number): Phaser.GameObjects.Sprite | undefined {
+    let best: Phaser.GameObjects.Sprite | undefined;
+    let bestDist = Infinity;
+    const check = (t: Phaser.GameObjects.Sprite) => {
+      if (!t.active || t.y < 0) return;
+      const d = Phaser.Math.Distance.Squared(x, y, t.x, t.y);
+      if (d < bestDist) { bestDist = d; best = t; }
     };
-    clean(this.bullets);
-    clean(this.enemyBullets);
-    clean(this.powerups);
+    (this.enemies.getChildren() as Enemy[]).forEach(e => !e.invulnerable && check(e));
+    if (this.boss && !this.boss.invulnerable) check(this.boss);
+    return best;
   }
 
-  private handleResize(gameSize: any) {
+  spawnPowerup(x = Phaser.Math.Between(30, this.scale.width - 30), y = -30) {
+    const kind = Phaser.Utils.Array.GetRandom(DROPS);
+    const pu = this.powerups.create(x, y, `powerup_${kind}`) as Phaser.Physics.Arcade.Image;
+    pu.setVelocityY(100).setData("kind", kind);
+  }
+
+  startBoss() {
+    const hp = Math.round((60 + this.level.id * 15) * BOSS_HP_BY_DIFF[this.difficulty]);
+    this.boss = new Boss(this, this.level, hp);
+    this.physics.add.overlap(this.boss, this.bullets, (_b, bullet) => this.hitBoss(bullet as Bullet));
+    this.physics.add.overlap(this.player, this.boss, () => {
+      if (this.boss?.invulnerable) return;
+      this.damagePlayer();
+      this.player.setVelocityY(300);
+    });
+  }
+
+  damagePlayer() {
+    const result = this.player.takeHit();
+    if (result !== "damaged" && result !== "dead") return;
+    this.scoreManager.resetCombo();
+    this.hud.setLives(this.player.lives);
+    this.fx.explode(this.player.x, this.player.y, 0.6);
+    this.fx.shake(0.55);
+    synth.playExplosion();
+    if (result === "dead") this.gameOver();
+  }
+
+  /** Secondary fire: expanding shockwave that wipes enemy bullets and hurts everything. */
+  hyperBomb() {
+    const { x, y } = this.player;
+    synth.playBomb();
+    this.cameras.main.flash(300, 180, 220, 255);
+    this.fx.shake(0.6);
+    this.fx.explode(x, y, 2);
+    const wave = this.add.circle(x, y, 20).setStrokeStyle(10, 0x66ccff, 0.9).setDepth(20);
+    this.tweens.add({ targets: wave, scale: Math.max(this.scale.width, this.scale.height) / 10, alpha: 0, duration: 600, ease: "Cubic.Out", onComplete: () => wave.destroy() });
+    (this.enemyBullets.getChildren() as Bullet[]).forEach(b => {
+      if (b.active) { this.fx.sparkBurst(b.x, b.y, 2); b.kill(); }
+    });
+    [...(this.enemies.getChildren() as Enemy[])].forEach(e => {
+      if (e.active && e.damage(5)) this.killEnemy(e);
+    });
+    this.damageBoss(5);
+    this.hud.setBombs(this.player.bombs);
+  }
+
+  /** Boss destroyed: bonus, then perk selection (or the final victory). */
+  levelComplete() {
+    if (this.ended) return;
+    this.ended = true;
+    const accuracy = this.player.shotsFired ? Math.min(1, this.hits / this.player.shotsFired) : 0;
+    const bonus = Math.round((accuracy * 1000 + this.kills * 10) * this.level.id);
+    this.scoreManager.score += bonus;
+    const stats: SectorStats = { kills: this.kills, accuracy, bonus };
+    const campaign: CampaignState = { ...this.campaign, score: this.scoreManager.score, lives: this.player.lives };
+    synth.setMusicIntensity(false);
+
+    if (this.level.id >= LEVELS.length) {
+      const newRecord = ScoreManager.submit(campaign.score, this.difficulty);
+      clearCampaign();
+      this.scene.start("Victory", { score: campaign.score, difficulty: this.difficulty, newRecord });
+      return;
+    }
+    this.scene.start("LevelClear", { campaign, stats, level: this.level });
+  }
+
+  // --- Combat ---
+
+  private hitEnemy(bullet: Bullet, enemy: Enemy) {
+    if (!bullet.active || !enemy.active) return;
+    bullet.kill();
+    this.hits++;
+    if (enemy.invulnerable) {
+      this.fx.sparkBurst(bullet.x, bullet.y, 3);
+      return;
+    }
+    if (enemy.damage(bullet.damage)) {
+      this.killEnemy(enemy);
+      return;
+    }
+    this.fx.sparkBurst(enemy.x, enemy.y);
+    if (enemy.heavy) {
+      this.fx.flashSprite(enemy);
+      this.fx.hitStop();
+      this.fx.shake(0.08);
+    }
+  }
+
+  private hitBoss(bullet: Bullet) {
+    if (!bullet.active || !this.boss || this.boss.invulnerable) return;
+    this.hits++;
+    this.fx.sparkBurst(bullet.x, bullet.y);
+    this.damageBoss(bullet.damage);
+    bullet.kill();
+  }
+
+  private damageBoss(amount: number) {
+    if (!this.boss || this.boss.invulnerable) return;
+    this.boss.damage(amount);
+    if (this.boss.state !== "DYING") return;
+    const points = this.scoreManager.addPoints(1000 * this.level.id);
+    this.fx.floatingText(this.boss.x, this.boss.y, `${this.level.bossName} DESTROYED +${points}`, "#ffdd33", 24);
+    this.hud.setScore(this.scoreManager.score);
+  }
+
+  private killEnemy(enemy: Enemy) {
+    const { x, y } = enemy;
+    const crit = Math.random() < CRIT_CHANCE;
+    const { points, tierUp } = this.scoreManager.addKill(enemy.points, crit);
+    this.kills++;
+    enemy.onKilled();
+    enemy.destroy();
+
+    this.fx.explode(x, y, enemy.explosionSize);
+    this.fx.shake(0.12 * enemy.explosionSize);
+    this.fx.floatingText(x, y, crit ? `CRITICAL! +${points}` : `+${points}`, crit ? "#ff5555" : "#ffffff", crit ? 20 : 16);
+    if (tierUp) {
+      const mult = this.scoreManager.multiplier;
+      this.fx.floatingText(x, y - 30, `COMBO x${mult.toFixed(1)}`, "#ffdd33", 22);
+      synth.playCombo(mult >= 3 ? 2 : mult >= 2 ? 1 : 0);
+    }
+    synth.playExplosion(enemy.heavy);
+    this.hud.setScore(this.scoreManager.score);
+    if (Math.random() < DROP_CHANCE) this.spawnPowerup(x, y);
+  }
+
+  private onPlayerContact(danger: Enemy | Bullet) {
+    if (!danger.active || this.ended) return;
+    if (danger instanceof Bullet) {
+      danger.kill();
+      if (!danger.fake) this.damagePlayer();
+      return;
+    }
+    if (danger.solid) {
+      this.damagePlayer();
+      return;
+    }
+    if (this.player.has("shield")) {
+      this.fx.shieldRipple(this.player.x, this.player.y, 30);
+      this.killEnemy(danger);
+      return;
+    }
+    this.fx.explode(danger.x, danger.y, danger.explosionSize);
+    danger.destroy();
+    this.damagePlayer();
+  }
+
+  private collectPowerup(pu: Phaser.Physics.Arcade.Image) {
+    if (!pu.active) return;
+    const kind = pu.getData("kind") as Drop;
+    pu.destroy();
+    synth.playPowerUp();
+    this.fx.floatingText(this.player.x, this.player.y - 30, DROP_LABELS[kind], "#00ffcc", 16);
+    if (kind === "bomb") {
+      this.player.bombs = Math.min(MAX_BOMBS, this.player.bombs + 1);
+      this.hud.setBombs(this.player.bombs);
+    } else this.player.activate(kind);
+  }
+
+  // --- Lifecycle ---
+
+  private cleanupPowerups() {
+    const { width, height } = this.scale;
+    [...(this.powerups.getChildren() as Phaser.Physics.Arcade.Image[])].forEach(p => {
+      if (p.y > height + 100 || p.x < -100 || p.x > width + 100) p.destroy();
+    });
+  }
+
+  private handleResize(gameSize: { width: number; height: number }) {
     const { width, height } = gameSize;
     this.cameras.main.setViewport(0, 0, width, height);
+    this.physics.world.setBounds(0, 0, width, height);
     this.background.setSize(width, height);
-    this.starfield.setSize(width, height);
-    this.livesText.setPosition(width - 120, 20);
-    this.difficultyText.setPosition(width / 2, 20);
-    if (this.menuBtn) this.menuBtn.setPosition(20, 60);
-
-    // REFINED CONTROL POSITIONING
-    // Joystick: Bottom Left, moved up for mobile browser bar safety
-    const safeBottomMargin = 120;
-    const joystickX = 80;
-    const joystickY = height - safeBottomMargin;
-
-    if (this.joystickBase) {
-      this.joystickBase.setPosition(joystickX, joystickY);
-      this.joystickThumb.setPosition(joystickX, joystickY);
-    }
-
-    // Action Buttons: Bottom Right Cluster
-    // Move them further right to open up the center for the ship
-    const buttonBottomY = height - (safeBottomMargin - 10); // ~110 from bottom
-    const buttonTopY = height - (safeBottomMargin + 80); // ~200 from bottom
-
-    // Rotate Right: Far bottom right corner
-    if (this.rotateRightBtn) this.rotateRightBtn.setPosition(width - 60, buttonBottomY);
-
-    // Rotate Left: To the left of Rotate Right
-    if (this.rotateLeftBtn) this.rotateLeftBtn.setPosition(width - 150, buttonBottomY);
-
-    // Fire: Above the two rotation buttons, centered relative to them approx
-    if (this.fireBtn) this.fireBtn.setPosition(width - 70, buttonTopY);
+    this.hud.layout();
+    this.touch?.layout(width, height);
   }
 
   private gameOver() {
     this.player.setActive(false).setVisible(false);
-    this.shieldVisual.setVisible(false);
-    this.scene.start("GameOver", { score: this.score });
+    if (this.ended) return;
+    this.ended = true;
+    const score = this.scoreManager.score;
+    const newRecord = ScoreManager.submit(score, this.difficulty);
+    synth.setMusicIntensity(false);
+    // Retry restarts the current sector from its auto-save (score/perks at sector start).
+    this.scene.start("GameOver", { score, difficulty: this.difficulty, newRecord, campaign: this.campaign });
   }
 }
