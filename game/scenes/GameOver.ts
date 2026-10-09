@@ -1,57 +1,81 @@
 import Phaser from 'phaser';
 import { synth } from '../utils/Synth';
+import ScoreManager from '../managers/ScoreManager';
+import PixelButton, { pixelText, pixelTitle, sizeTitle } from '../ui/PixelButton';
+import type { CampaignState } from '../managers/LevelManager';
+import { DifficultyLabels, DifficultyLevel } from './MainMenu';
 
+interface ResultData {
+  score: number;
+  difficulty?: string;
+  newRecord?: boolean;
+  /** Sector auto-save to retry from (absent after the final victory). */
+  campaign?: CampaignState;
+}
+
+/** Results screen with local high-score table. Victory reuses it with a different title and music. */
 export default class GameOver extends Phaser.Scene {
-  private score: number = 0;
+  private data_!: ResultData;
 
-  constructor() {
-    super('GameOver');
+  constructor(key = 'GameOver', private titleText = 'GAME OVER', private colors: [string, string, string] = ['#ff8a8a', '#ff1a1a', '#4a0000']) {
+    super(key);
   }
 
-  init(data: { score: number }) {
-    this.score = data.score;
+  init(data: ResultData) {
+    this.data_ = { score: data.score ?? 0, difficulty: data.difficulty ?? 'MEDIUM', newRecord: data.newRecord, campaign: data.campaign };
+  }
+
+  protected playMusic() {
+    synth.playGameOverMusic();
   }
 
   create() {
-    const { width, height } = this.cameras.main;
+    const { score, difficulty, newRecord, campaign } = this.data_;
 
-    this.add.tileSprite(0, 0, width, height, 'background').setOrigin(0, 0).setAlpha(0.3);
+    const background = this.add.tileSprite(0, 0, 1, 1, `bg_${campaign?.level ?? 10}`).setOrigin(0).setAlpha(0.5);
+    const title = pixelTitle(this, this.titleText, ...this.colors);
+    const scoreText = this.add.text(0, 0, `PUNTOS ${score}`, pixelText(16)).setOrigin(0.5);
+    const record = this.add.text(0, 0, newRecord ? '¡NUEVO RECORD!' : '', pixelText(12, '#ffdd33')).setOrigin(0.5);
+    if (newRecord) this.tweens.add({ targets: record, alpha: 0.3, duration: 400, yoyo: true, loop: -1 });
 
-    // Game Over Image
-    this.add.image(width / 2, height / 3, 'game_over_text').setOrigin(0.5);
+    // Top 5 local scores with date and difficulty
+    const rows = ScoreManager.loadHighScores().slice(0, 5).map((h, i) =>
+      `${i + 1}. ${String(h.score).padStart(6)} ${(DifficultyLabels[h.difficulty as DifficultyLevel] ?? h.difficulty).padEnd(7)} ${h.date}`);
+    const table = this.add.text(0, 0, ['MEJORES PUNTUACIONES', '', ...rows].join('\n'), pixelText(8, '#aaccff', { lineSpacing: 8 })).setOrigin(0.5, 0);
 
-    // Score Text
-    this.add.text(width / 2, height / 2, `Final Score: ${this.score}`, {
-      fontFamily: 'Arial',
-      fontSize: '32px',
-      color: '#ffffff',
-      align: 'center'
-    }).setOrigin(0.5);
-
-    // Restart Button Image
-    const restartBtn = this.add.image(width / 2, height * 0.7, 'restart_btn')
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-
-    // Pulse animation for the button
-    this.tweens.add({
-      targets: restartBtn,
-      scaleX: 1.1,
-      scaleY: 1.1,
-      duration: 500,
-      yoyo: true,
-      loop: -1
-    });
-
+    // Retry the same sector from its auto-save (with at least 3 lives), or a new run after victory.
     const restartGame = () => {
       synth.stopMusic();
-      this.scene.start('MainGame');
+      this.scene.start('MainGame', campaign ? { campaign: { ...campaign, lives: Math.max(campaign.lives, 3) } } : { difficulty });
     };
+    const toMenu = () => this.scene.start('MainMenu');
+    const restartBtn = new PixelButton(this, campaign ? `REINTENTAR S${campaign.level}` : 'JUGAR DE NUEVO', restartGame, 0x4dd9ff);
+    restartBtn.selected = true;
+    const menuBtn = new PixelButton(this, 'MENU', toMenu);
 
-    restartBtn.on('pointerdown', restartGame);
+    const layout = (width: number, height: number) => {
+      const col = Math.min(width - 32, 480);
+      background.setSize(width, height);
+      sizeTitle(title, Math.min(col / (this.titleText.length + 1.5), height * 0.09, 56));
+      title.setPosition(width / 2, height * 0.1 + title.height / 2);
+      const below = title.y + title.height / 2;
+      scoreText.setStyle(pixelText(col < 400 ? 12 : 16)).setPosition(width / 2, below + height * 0.06);
+      record.setPosition(width / 2, scoreText.y + 28);
+      table.setStyle(pixelText(col < 400 ? 8 : 12, '#aaccff', { lineSpacing: 8 })).setPosition(width / 2, record.y + 24);
+      const btnH = Phaser.Math.Clamp(Math.round(height * 0.09), 40, 60);
+      const btnW = Math.min(col, 340);
+      restartBtn.layout(btnW, btnH, Math.min(btnH * 0.34, btnW / 13)).setPosition(width / 2, height - 32 - btnH * 1.5 - 10);
+      menuBtn.layout(btnW * 0.6, btnH * 0.8).setPosition(width / 2, height - 32 - btnH * 0.4);
+    };
+    layout(this.scale.width, this.scale.height);
+    const onResize = (size: Phaser.Structs.Size) => layout(size.width, size.height);
+    this.scale.on('resize', onResize);
+    this.events.once('shutdown', () => this.scale.off('resize', onResize));
+
     this.input.keyboard?.on('keydown-SPACE', restartGame);
     this.input.keyboard?.on('keydown-ENTER', restartGame);
+    this.input.keyboard?.on('keydown-ESC', toMenu);
 
-    synth.playGameOverMusic();
+    this.playMusic();
   }
 }

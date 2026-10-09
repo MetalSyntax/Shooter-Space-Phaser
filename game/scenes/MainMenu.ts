@@ -1,6 +1,10 @@
-
 import Phaser from 'phaser';
 import { synth } from '../utils/Synth';
+import ScoreManager from '../managers/ScoreManager';
+import PixelButton, { pixelText, pixelScale, pixelTitle, sizeTitle, openOverlay } from '../ui/PixelButton';
+import { SHIPS, loadShip } from '../entities/Ships';
+import { loadCampaign, clearCampaign, newCampaign, CampaignState } from '../managers/LevelManager';
+import { loadScheme, saveScheme, nextScheme, SCHEMES } from '../ui/TouchControls';
 
 export type DifficultyLevel = 'EASY' | 'MEDIUM' | 'HARD';
 
@@ -10,173 +14,230 @@ export const DifficultySettings = {
   HARD: { speedMultiplier: 2.0, spawnDelay: 400, scoreMulti: 3 }
 };
 
+export const DifficultyLabels: Record<DifficultyLevel, string> = { EASY: 'FACIL', MEDIUM: 'NORMAL', HARD: 'DIFICIL' };
+
+const DIFFS: { key: DifficultyLevel; color: number; desc: string }[] = [
+  { key: 'EASY', color: 0x33dd66, desc: 'PUNTOS x1 · RITMO TRANQUILO' },
+  { key: 'MEDIUM', color: 0xffcc33, desc: 'PUNTOS x2 · RITMO RAPIDO' },
+  { key: 'HARD', color: 0xff4455, desc: 'PUNTOS x3 · SOLO PARA ASES' },
+];
+
 export default class MainMenu extends Phaser.Scene {
   private selectedDifficulty: DifficultyLevel = 'MEDIUM';
-  private titleImage!: Phaser.GameObjects.Image;
+  private background!: Phaser.GameObjects.TileSprite;
+  private stars: Phaser.GameObjects.Image[] = [];
+  private title!: Phaser.GameObjects.Text;
+  private saved: CampaignState | null = null;
+  private continueBtn?: PixelButton;
+  private controlsBtn?: PixelButton;
+  private hangarBtn!: PixelButton;
+  private guideBtn!: PixelButton;
+  private subtitle!: Phaser.GameObjects.Text;
+  private ship!: Phaser.GameObjects.Image;
+  private shipBob?: Phaser.Tweens.Tween;
   private diffLabel!: Phaser.GameObjects.Text;
-  private diffButtons: Phaser.GameObjects.Image[] = [];
-  private startBtn!: Phaser.GameObjects.Image;
-  private fullscreenBtn!: Phaser.GameObjects.Image;
-  private starfield!: Phaser.GameObjects.Group;
+  private diffButtons: PixelButton[] = [];
+  private diffDesc!: Phaser.GameObjects.Text;
+  private startBtn!: PixelButton;
+  private recordText!: Phaser.GameObjects.Text;
+  private hintText!: Phaser.GameObjects.Text;
+  private musicBtn!: PixelButton;
+  private sfxBtn!: PixelButton;
+  private fullscreenBtn?: PixelButton;
 
   constructor() {
     super('MainMenu');
   }
 
   create() {
-    const { width, height } = this.cameras.main;
+    const { width, height } = this.scale;
+    const isTouch = this.sys.game.device.input.touch;
 
-    // Parallax Starfield effect
-    this.createStarfield(width, height);
-
-    // Title
-    this.titleImage = this.add.image(0, 0, 'game_title').setOrigin(0.5);
-
-    // Difficulty Selector Label
-    this.diffLabel = this.add.text(0, 0, 'Select Difficulty:', {
-      fontFamily: 'Arial', fontSize: '24px', color: '#aaa'
-    }).setOrigin(0.5);
-
-    // Difficulty Buttons
-    const difficulties: DifficultyLevel[] = ['EASY', 'MEDIUM', 'HARD'];
-    this.diffButtons = difficulties.map(diff => {
-      const texture = this.getTextureKey(diff, this.selectedDifficulty === diff);
-      const btn = this.add.image(0, 0, texture)
-        .setOrigin(0.5)
-        .setInteractive({ useHandCursor: true });
-
-      btn.setData('difficulty', diff);
-
-      btn.on('pointerdown', () => {
-        this.selectedDifficulty = diff;
-        this.updateButtons();
-      });
-
-      return btn;
+    // Same scrolling space backdrop as the game, plus twinkling stars.
+    this.background = this.add.tileSprite(0, 0, width, height, 'bg_1').setOrigin(0).setAlpha(0.7);
+    this.stars = Array.from({ length: 60 }, () => {
+      const star = this.add.image(0, 0, 'star').setAlpha(Phaser.Math.FloatBetween(0.2, 0.8));
+      this.tweens.add({ targets: star, alpha: 0.1, duration: Phaser.Math.Between(600, 1800), yoyo: true, loop: -1, delay: Phaser.Math.Between(0, 1500) });
+      return star;
     });
 
-    // Start Button
-    this.startBtn = this.add.image(0, 0, 'start_game')
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
+    this.title = pixelTitle(this, 'SPACE SHOOTER', '#fff27a', '#ff9d00', '#b3160b');
+    this.subtitle = this.add.text(0, 0, 'REMASTERED', pixelText(12, '#4dd9ff')).setOrigin(0.5);
+    this.ship = this.add.image(0, 0, `ship_${loadShip()}`).setAngle(-90).setInteractive({ useHandCursor: true })
+      .on('pointerup', () => openOverlay(this, 'Hangar'));
 
-    this.tweens.add({
-      targets: this.startBtn,
-      scaleX: 1.1,
-      scaleY: 1.1,
-      duration: 800,
-      yoyo: true,
-      loop: -1
+    this.diffLabel = this.add.text(0, 0, 'SELECCIONA DIFICULTAD', pixelText(12, '#8892b0')).setOrigin(0.5);
+    this.diffButtons = DIFFS.map(d => new PixelButton(this, DifficultyLabels[d.key], () => this.selectDifficulty(d.key), d.color));
+    this.diffDesc = this.add.text(0, 0, '', pixelText(8, '#c8d0e8')).setOrigin(0.5);
+
+    // Campaign: continue from the auto-saved sector, or start a new run.
+    this.saved = loadCampaign();
+    this.startBtn = new PixelButton(this, this.saved ? 'NUEVA PARTIDA' : '▶ JUGAR', () => this.startGame(), 0x4dd9ff);
+    if (this.saved) {
+      const s = this.saved;
+      this.continueBtn = new PixelButton(this, `▶ CONTINUAR S${s.level}`, () => this.continueGame(), 0xffdd33);
+      this.continueBtn.selected = true;
+      this.tweens.add({ targets: this.continueBtn, alpha: 0.75, duration: 600, yoyo: true, loop: -1 });
+    } else {
+      this.startBtn.selected = true;
+      this.tweens.add({ targets: this.startBtn, alpha: 0.75, duration: 600, yoyo: true, loop: -1 });
+    }
+
+    const best = ScoreManager.best();
+    this.recordText = this.add.text(0, 0, best
+      ? `RECORD ${best.score} · ${DifficultyLabels[best.difficulty as DifficultyLevel] ?? best.difficulty}`
+      : 'RECORD --', pixelText(12, '#ffdd33')).setOrigin(0.5);
+    this.hintText = this.add.text(0, 0, isTouch ? '' : 'WASD MOVER · RATON APUNTAR · CLIC/ESPACIO DISPARAR · ESC PAUSA', pixelText(8, '#5a6488')).setOrigin(0.5);
+
+    // Hangar (ship select) and the in-game guide; refresh the ship when the hangar closes.
+    this.hangarBtn = new PixelButton(this, `NAVE: ${SHIPS[loadShip()].name}`, () => openOverlay(this, 'Hangar'), 0xffdd33);
+    this.guideBtn = new PixelButton(this, 'GUIA', () => openOverlay(this, 'Guide'), 0x4dd9ff);
+    this.events.on('resume', () => {
+      this.ship.setTexture(`ship_${loadShip()}`);
+      this.hangarBtn.setText(`NAVE: ${SHIPS[loadShip()].name}`);
     });
 
-    this.startBtn.on('pointerdown', this.startGame, this);
+    // Mobile: pick a control scheme
+    if (isTouch) {
+      const label = () => `CONTROLES: ${SCHEMES[loadScheme()].label}`;
+      this.controlsBtn = new PixelButton(this, label(), () => {
+        saveScheme(nextScheme(loadScheme()));
+        this.controlsBtn!.setText(label());
+      }, 0x66ccff);
+    }
 
-    this.input.keyboard?.on('keydown-ENTER', this.startGame, this);
-    this.input.keyboard?.on('keydown-ENTER', this.startGame, this);
-    this.input.keyboard?.on('keydown-SPACE', this.startGame, this);
-
-    // Fullscreen Button
-    this.fullscreenBtn = this.add.image(width - 20, 20, 'fullscreen_btn')
-      .setOrigin(1, 0)
-      .setInteractive({ useHandCursor: true })
-      .setScale(0.55)
-      .on('pointerdown', () => {
-        if (this.scale.isFullscreen) {
-          this.scale.stopFullscreen();
-        } else {
-          this.scale.startFullscreen();
-        }
+    // Top bar: separate music / sfx toggles + fullscreen
+    const musicLabel = () => `♪ ${synth.musicMuted ? 'OFF' : 'ON'}`;
+    const sfxLabel = () => `SFX ${synth.sfxMuted ? 'OFF' : 'ON'}`;
+    this.musicBtn = new PixelButton(this, musicLabel(), () => { synth.setMusicMuted(!synth.musicMuted); this.musicBtn.setText(musicLabel()); });
+    this.sfxBtn = new PixelButton(this, sfxLabel(), () => { synth.setSfxMuted(!synth.sfxMuted); this.sfxBtn.setText(sfxLabel()); });
+    if (this.sys.game.device.fullscreen.available) {
+      this.fullscreenBtn = new PixelButton(this, '⛶', () => {
+        if (this.scale.isFullscreen) this.scale.stopFullscreen();
+        else this.scale.startFullscreen();
       });
+    }
 
-    // Initial Layout
+    this.selectDifficulty(this.selectedDifficulty);
+
+    const kb = this.input.keyboard;
+    const primary = () => (this.saved ? this.continueGame() : this.startGame());
+    kb?.on('keydown-ENTER', primary);
+    kb?.on('keydown-SPACE', primary);
+    const step = (dir: number) => {
+      const i = DIFFS.findIndex(d => d.key === this.selectedDifficulty);
+      this.selectDifficulty(DIFFS[Phaser.Math.Wrap(i + dir, 0, DIFFS.length)].key);
+    };
+    kb?.on('keydown-LEFT', () => step(-1));
+    kb?.on('keydown-A', () => step(-1));
+    kb?.on('keydown-RIGHT', () => step(1));
+    kb?.on('keydown-D', () => step(1));
+
     this.resizeLayout(width, height);
-
-    // Handle Resize
-    this.scale.on('resize', (gameSize: any) => {
-      this.resizeLayout(gameSize.width, gameSize.height);
-    }, this);
+    const onResize = (gameSize: Phaser.Structs.Size) => this.resizeLayout(gameSize.width, gameSize.height);
+    this.scale.on('resize', onResize);
+    this.events.once('shutdown', () => this.scale.off('resize', onResize));
 
     synth.playMenuMusic();
   }
 
+  update() {
+    this.background.tilePositionY -= 0.5;
+  }
+
+  /** Stacks every block in one centered column sized from the real viewport (portrait or landscape). */
   private resizeLayout(width: number, height: number) {
-    const isLandscape = width > height;
+    const pad = 16;
+    const col = Math.min(width - pad * 2, 560);
 
-    // 1. Title Layout
-    // Scale title to fit width with some padding
-    const titleScale = Math.min(width / 600, 1); // Adjusted scale for image
-    this.titleImage.setScale(titleScale);
-    this.titleImage.setPosition(width / 2, height * (isLandscape ? 0.2 : 0.15));
+    this.background.setSize(width, height);
+    this.stars.forEach(s => s.setPosition(Phaser.Math.Between(0, width), Phaser.Math.Between(0, height)));
 
-    // 2. Difficulty Section
-    const diffLabelY = height * (isLandscape ? 0.35 : 0.35);
-    this.diffLabel.setPosition(width / 2, diffLabelY);
-    this.diffLabel.setFontSize(isLandscape ? 24 : 20);
+    // Top bar
+    const barH = Phaser.Math.Clamp(Math.round(height * 0.06), 32, 40);
+    const barFont = barH * 0.32;
+    this.musicBtn.layout(barH * 2.4, barH, barFont).setPosition(pad + barH * 1.2, pad + barH / 2);
+    this.sfxBtn.layout(barH * 2.6, barH, barFont).setPosition(pad + barH * 2.4 + 8 + barH * 1.3, pad + barH / 2);
+    this.fullscreenBtn?.layout(barH, barH, barH * 0.5).setPosition(width - pad - barH / 2, pad + barH / 2);
 
-    if (isLandscape) {
-      // Horizontal layout for buttons in landscape
-      const totalWidth = width * 0.6;
-      const spacing = totalWidth / 3;
-      const startX = width / 2 - spacing;
-      const btnY = height * 0.55;
+    // Sizes
+    const gapRow = 8;
+    this.controlsBtn?.layout(Math.min(col, 300), barH, barFont);
+    const navW = (Math.min(col, 420) - gapRow) / 2;
+    this.hangarBtn.layout(navW * 1.25, barH, barFont);
+    this.guideBtn.layout(navW * 0.75, barH, barFont);
+    const short = height < 520; // landscape phones: drop the decorative ship, tighten everything
+    // 13 glyphs + outline: size the title to the width, capped by the available height.
+    sizeTitle(this.title, Math.min((width - pad * 2) / 14.5, height * (short ? 0.08 : 0.09), 56));
+    this.ship.setVisible(!short).setScale(pixelScale(this.ship.height, height * 0.09, 2));
 
-      this.diffButtons.forEach((btn, index) => {
-        btn.setPosition(startX + (spacing * index), btnY);
-        btn.setScale(0.6);
-      });
-    } else {
-      // Vertical layout for buttons in portrait
-      const startY = height * 0.45;
-      const spacing = 70;
+    const gap = 8;
+    const diffH = Phaser.Math.Clamp(Math.round(height * 0.075), 36, 56);
+    const diffW = (col - gap * 2) / 3;
+    const diffFont = Math.min(diffH * 0.34, diffW / 9);
+    this.diffButtons.forEach(b => b.layout(diffW, diffH, diffFont));
 
-      this.diffButtons.forEach((btn, index) => {
-        btn.setPosition(width / 2, startY + (spacing * index));
-        btn.setScale(0.55);
-      });
-    }
+    const startH = Phaser.Math.Clamp(Math.round(height * 0.1), 44, 72);
+    const startW = Math.min(col, 380);
+    const startFont = Math.min(startH * 0.32, startW / 16);
+    this.continueBtn?.layout(startW, startH, startFont);
+    this.startBtn.layout(this.saved ? startW * 0.8 : startW, this.saved ? startH * 0.75 : startH, this.saved ? startFont * 0.75 : startFont);
 
-    // 3. Start Button
-    this.startBtn.setPosition(width / 2, height * (isLandscape ? 0.85 : 0.85));
-    this.startBtn.setPosition(width / 2, height * (isLandscape ? 0.85 : 0.85));
-    this.startBtn.setScale(isLandscape ? 1 : 0.8);
+    const small = col < 400 ? 8 : 12;
+    this.subtitle.setStyle(pixelText(small, '#4dd9ff'));
+    this.diffLabel.setStyle(pixelText(small, '#8892b0'));
+    this.recordText.setStyle(pixelText(small, '#ffdd33'));
 
-    // 4. Fullscreen Button
-    if (this.fullscreenBtn) {
-      this.fullscreenBtn.setPosition(width - 20, 20);
-    }
+    // Vertical stack: [height, place(y = top of block)]
+    const blocks: [number, (y: number) => void][] = [
+      [this.title.displayHeight, y => this.title.setPosition(width / 2, y + this.title.displayHeight / 2)],
+      [this.subtitle.height, y => this.subtitle.setPosition(width / 2, y + this.subtitle.height / 2)],
+      ...(short ? [] : [[this.ship.displayHeight + 12, (y: number) => this.ship.setPosition(width / 2, y + this.ship.displayHeight / 2 + 6)] as [number, (y: number) => void]]),
+      [this.diffLabel.height, y => this.diffLabel.setPosition(width / 2, y + this.diffLabel.height / 2)],
+      [diffH, y => this.diffButtons.forEach((b, i) => b.setPosition(width / 2 + (i - 1) * (diffW + gap), y + diffH / 2))],
+      [this.diffDesc.height, y => this.diffDesc.setPosition(width / 2, y + this.diffDesc.height / 2)],
+      ...(this.continueBtn ? [[startH, (y: number) => this.continueBtn!.setPosition(width / 2, y + startH / 2)] as [number, (y: number) => void]] : []),
+      [this.startBtn.height, y => this.startBtn.setPosition(width / 2, y + this.startBtn.height / 2)],
+      [this.recordText.height, y => this.recordText.setPosition(width / 2, y + this.recordText.height / 2)],
+      [barH, y => {
+        const total = this.hangarBtn.width + gapRow + this.guideBtn.width;
+        this.hangarBtn.setPosition(width / 2 - total / 2 + this.hangarBtn.width / 2, y + barH / 2);
+        this.guideBtn.setPosition(width / 2 + total / 2 - this.guideBtn.width / 2, y + barH / 2);
+      }],
+      ...(this.controlsBtn ? [[barH, (y: number) => this.controlsBtn!.setPosition(width / 2, y + barH / 2)] as [number, (y: number) => void]] : []),
+    ];
+    const top = pad * 2 + barH;
+    const bottom = height - pad - (this.hintText.text ? 16 : 0);
+    const content = blocks.reduce((sum, [h]) => sum + h, 0);
+    const spacing = Phaser.Math.Clamp((bottom - top - content) / (blocks.length + 1), 6, height * 0.05);
+    let y = top + Math.max(0, (bottom - top - content - spacing * (blocks.length - 1)) / 2);
+    blocks.forEach(([h, place]) => { place(y); y += h + spacing; });
 
-    // Re-create starfield to cover new area if needed
-    // (Simple approach: just ensure we have enough stars scattered)
+    // Restart the bob from the new resting position so the tween doesn't fight the layout.
+    this.shipBob?.remove();
+    this.shipBob = this.tweens.add({ targets: this.ship, y: this.ship.y - 6, duration: 900, yoyo: true, loop: -1, ease: 'Sine.InOut' });
+
+    this.hintText.setWordWrapWidth(width - pad * 2).setAlign('center').setPosition(width / 2, height - pad - 4);
   }
 
-  private updateButtons() {
-    this.diffButtons.forEach(btn => {
-      const diff = btn.getData('difficulty') as DifficultyLevel;
-      const isActive = diff === this.selectedDifficulty;
-      btn.setTexture(this.getTextureKey(diff, isActive));
+  private selectDifficulty(diff: DifficultyLevel) {
+    this.selectedDifficulty = diff;
+    this.diffButtons.forEach((btn, i) => {
+      btn.selected = DIFFS[i].key === diff;
+      btn.redraw();
     });
-  }
-
-  private getTextureKey(diff: DifficultyLevel, isActive: boolean): string {
-    const state = isActive ? 'active' : 'disable';
-    return `${diff.toLowerCase()}_${state}`;
-  }
-
-  private createStarfield(width: number, height: number) {
-    // Clear existing if any (though we usually just add more or reset scene)
-    // Create new starfield group
-    this.starfield = this.add.group();
-
-    for (let i = 0; i < 100; i++) {
-      const x = Phaser.Math.Between(0, width);
-      const y = Phaser.Math.Between(0, height);
-      const star = this.add.image(x, y, 'star').setScale(Phaser.Math.FloatBetween(0.5, 1)).setAlpha(0.5);
-      this.starfield.add(star);
-    }
+    const d = DIFFS.find(x => x.key === diff)!;
+    this.diffDesc.setText(d.desc).setColor(Phaser.Display.Color.IntegerToColor(d.color).rgba);
   }
 
   private startGame() {
     synth.stopMusic();
-    this.scene.start('MainGame', { difficulty: this.selectedDifficulty });
+    clearCampaign();
+    this.scene.start('MainGame', { campaign: newCampaign(this.selectedDifficulty, loadShip()) });
+  }
+
+  private continueGame() {
+    synth.stopMusic();
+    this.scene.start('MainGame', { campaign: this.saved });
   }
 }
